@@ -1,0 +1,26 @@
+{
+  "name": "funnel-os",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Funnel OS: an agentic funnel builder with an AI coach, on Vercel and Supabase.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test:unit": "node test/unit.js",
+    "test:db": "bash test/db-test.sh",
+    "test:server": "node test/server.js",
+    "test:api": "node test/fos.js && node test/wa.js",
+    "test:ui": "node test/ui-smoke.js",
+    "library": "node scripts/build-library.js",
+    "templates": "node scripts/learn-templates.js"
+  },
+  "dependencies": {
+    "@vercel/functions": "^3.11.3",
+    "opentype.js": "^1.3.4",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "node-html-parser": "^7.1.0"
+  }
+}

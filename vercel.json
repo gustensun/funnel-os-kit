@@ -1,0 +1,58 @@
+{
+  "cleanUrls": true,
+  "functions": {
+    "api/ask.js": {
+      "maxDuration": 300
+    },
+    "api/app.js": {
+      "maxDuration": 30
+    },
+    "api/wa.js": {
+      "maxDuration": 300
+    },
+    "api/funnel.js": {
+      "maxDuration": 300
+    },
+    "api/config.js": {
+      "maxDuration": 10
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/config.js",
+      "destination": "/api/config"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "microphone=(self), camera=()"
+        }
+      ]
+    },
+    {
+      "source": "/js/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ]
+}

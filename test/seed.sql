@@ -1,0 +1,4 @@
+-- Library sample, loaded after the migrations. Test only.
+insert into public.gai_lib_sources (id, kind, title, url) values ('00000000-0000-0000-0000-0000000000d1', 'youtube', 'How I build sales funnels', 'https://www.youtube.com/watch?v=abc'), ('00000000-0000-0000-0000-0000000000d2', 'doc', 'Offer stack framework', 'https://docs.example/private');
+insert into public.gai_lib_chunks (id, source_id, idx, at_s, body) values (1, '00000000-0000-0000-0000-0000000000d1', 0, 125, 'A sales funnel starts with one clear offer and one traffic source.'), (2, '00000000-0000-0000-0000-0000000000d2', 0, null, 'Stack the offer with bonuses that remove the next obstacle.');
+insert into public.gai_lib_playbook (id, topic, question, answer, sources) values ('00000000-0000-0000-0000-0000000000e1', 'Offers', 'How do I price my offer?', 'Price from the outcome.', '{Offer stack framework}');

@@ -1,0 +1,41 @@
+Funnel OS License
+
+Copyright (c) 2026 Gusten Sun. All rights reserved.
+
+This license covers the Funnel OS source code, prompts, frameworks, starter
+coach library, template data, documentation and design files in this
+repository (the "Software"). Parts made by others keep their own licenses,
+listed in THIRD_PARTY_NOTICES.md.
+
+You may:
+
+1. Run your own copies of the Software for your own business and for
+   your clients.
+2. Change the Software in any way for your own use.
+3. Let your employees and contractors use and work on your copy for
+   your business.
+
+The funnels, pages, copy and graphics you and your members make with the
+Software are yours to use however you like.
+
+You may not:
+
+1. Sell, sublicense, rent, give away or publish the Software, changed or
+   unchanged, as a product, template, starter kit, course material or
+   service that lets other people set up their own copy.
+2. Publish the source code, for example in a public repository, a
+   download or a post.
+3. Remove or change this notice or the notices in THIRD_PARTY_NOTICES.md.
+
+Keep your copy of the repository private.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHOR OR COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+You are responsible for your own accounts, API keys, costs, data and the
+messages your copy sends.

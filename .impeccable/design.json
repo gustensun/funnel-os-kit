@@ -1,0 +1,784 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-23T20:23:20Z",
+  "title": "Design System: Funnel OS",
+  "extensions": {
+    "colorMeta": {
+      "forest-ink": {
+        "role": "primary",
+        "displayName": "Forest Ink",
+        "canonical": "#0B2418",
+        "tonalRamp": [
+          "#060d09",
+          "#1a2921",
+          "#31483c",
+          "#4e685a",
+          "#6e8a7a",
+          "#92ac9d",
+          "#bccec4",
+          "#e7f1eb"
+        ]
+      },
+      "field-sage": {
+        "role": "secondary",
+        "displayName": "Field Sage",
+        "canonical": "#668168",
+        "tonalRamp": [
+          "#070d07",
+          "#1b291c",
+          "#324934",
+          "#4f6951",
+          "#6f8b71",
+          "#93ad95",
+          "#bdcfbe",
+          "#e7f2e8"
+        ]
+      },
+      "deep-sage": {
+        "role": "secondary",
+        "displayName": "Deep Sage",
+        "canonical": "#4E6A50",
+        "tonalRamp": [
+          "#060d07",
+          "#1a2a1b",
+          "#314933",
+          "#4e6a50",
+          "#6e8b70",
+          "#92ae93",
+          "#bccfbd",
+          "#e7f2e7"
+        ]
+      },
+      "ivory-paper": {
+        "role": "neutral",
+        "displayName": "Ivory Paper",
+        "canonical": "#FAF7EF",
+        "tonalRamp": [
+          "#0c0b09",
+          "#262521",
+          "#44423c",
+          "#64615a",
+          "#85827b",
+          "#a7a59e",
+          "#cbc9c4",
+          "#efeeec"
+        ]
+      },
+      "side-paper": {
+        "role": "neutral",
+        "displayName": "Side Paper",
+        "canonical": "#F2EFE4",
+        "tonalRamp": [
+          "#0c0b09",
+          "#262520",
+          "#44423a",
+          "#646158",
+          "#858278",
+          "#a8a59c",
+          "#cbc9c2",
+          "#efeeeb"
+        ]
+      },
+      "raised-paper": {
+        "role": "neutral",
+        "displayName": "Raised Paper",
+        "canonical": "#EDEADF",
+        "tonalRamp": [
+          "#0c0b09",
+          "#262520",
+          "#44423a",
+          "#646158",
+          "#858278",
+          "#a8a59c",
+          "#cbc9c2",
+          "#efeeeb"
+        ]
+      },
+      "sage-wash": {
+        "role": "neutral",
+        "displayName": "Sage Wash",
+        "canonical": "#E5E9DD",
+        "tonalRamp": [
+          "#0b0c09",
+          "#242620",
+          "#40433a",
+          "#5f6359",
+          "#808479",
+          "#a3a79c",
+          "#c8cac3",
+          "#eeefeb"
+        ]
+      },
+      "moss": {
+        "role": "neutral",
+        "displayName": "Moss",
+        "canonical": "#4F5A4D",
+        "tonalRamp": [
+          "#090c09",
+          "#212720",
+          "#3b453a",
+          "#5a6558",
+          "#7a8678",
+          "#9ea99b",
+          "#c4ccc2",
+          "#ebf0eb"
+        ]
+      },
+      "lichen": {
+        "role": "neutral",
+        "displayName": "Lichen",
+        "canonical": "#61685C",
+        "tonalRamp": [
+          "#0a0c09",
+          "#232620",
+          "#3e443a",
+          "#5d6458",
+          "#7e8579",
+          "#a1a89c",
+          "#c6cbc2",
+          "#edefeb"
+        ]
+      },
+      "pill-positive-ink": {
+        "role": "neutral",
+        "displayName": "Positive Pill Ink",
+        "canonical": "#2F4A32",
+        "tonalRamp": [
+          "#060d07",
+          "#1a2a1c",
+          "#304933",
+          "#4d6a50",
+          "#6e8b70",
+          "#92ae94",
+          "#bccfbd",
+          "#e7f2e8"
+        ]
+      },
+      "hairline-border": {
+        "role": "neutral",
+        "displayName": "Border Hairline",
+        "canonical": "rgba(11, 36, 24, 0.12)",
+        "tonalRamp": [
+          "#0b0b09",
+          "#252521",
+          "#42423c",
+          "#62625a",
+          "#83837b",
+          "#a5a69e",
+          "#c9c9c4",
+          "#eeefec"
+        ]
+      },
+      "hairline-rule": {
+        "role": "neutral",
+        "displayName": "Rule Hairline",
+        "canonical": "rgba(11, 36, 24, 0.10)",
+        "tonalRamp": [
+          "#0b0b09",
+          "#252521",
+          "#43423c",
+          "#62625a",
+          "#83837b",
+          "#a6a59e",
+          "#cac9c4",
+          "#efefec"
+        ]
+      },
+      "hairline-control": {
+        "role": "neutral",
+        "displayName": "Control Hairline",
+        "canonical": "rgba(11, 36, 24, 0.22)",
+        "tonalRamp": [
+          "#0b0b09",
+          "#242621",
+          "#41433c",
+          "#60625b",
+          "#81847b",
+          "#a3a69e",
+          "#c8cac4",
+          "#eeefec"
+        ]
+      },
+      "dot-grid": {
+        "role": "neutral",
+        "displayName": "Dot Grid",
+        "canonical": "rgba(11, 36, 24, 0.12)",
+        "tonalRamp": [
+          "#0b0b09",
+          "#252521",
+          "#42423c",
+          "#62625a",
+          "#83837b",
+          "#a5a69e",
+          "#c9c9c4",
+          "#eeefec"
+        ]
+      },
+      "scrim": {
+        "role": "neutral",
+        "displayName": "Drawer Scrim",
+        "canonical": "rgba(11, 36, 24, 0.38)",
+        "tonalRamp": [
+          "#0a0c09",
+          "#232622",
+          "#3e443d",
+          "#5d645b",
+          "#7d857c",
+          "#a0a79f",
+          "#c6cbc5",
+          "#ecefec"
+        ]
+      },
+      "night-ground": {
+        "role": "neutral",
+        "displayName": "Night Ground",
+        "canonical": "#0B1C13",
+        "tonalRamp": [
+          "#080d0a",
+          "#1d2822",
+          "#36473d",
+          "#53675b",
+          "#74887c",
+          "#97ab9f",
+          "#bfcdc5",
+          "#e9f1ec"
+        ]
+      },
+      "night-surface": {
+        "role": "neutral",
+        "displayName": "Night Surface",
+        "canonical": "#0E2218",
+        "tonalRamp": [
+          "#070d0a",
+          "#1c2822",
+          "#34473d",
+          "#51675b",
+          "#72897c",
+          "#95ab9f",
+          "#becec5",
+          "#e8f1ec"
+        ]
+      },
+      "night-side": {
+        "role": "neutral",
+        "displayName": "Night Sidebar",
+        "canonical": "#091710",
+        "tonalRamp": [
+          "#080c0a",
+          "#1f2723",
+          "#38463e",
+          "#55665d",
+          "#76877e",
+          "#99aaa0",
+          "#c1ccc6",
+          "#eaf0ed"
+        ]
+      },
+      "night-raised": {
+        "role": "neutral",
+        "displayName": "Night Raised",
+        "canonical": "#13291E",
+        "tonalRamp": [
+          "#070d09",
+          "#1b2921",
+          "#33483c",
+          "#50685b",
+          "#70897b",
+          "#94ac9e",
+          "#bdcec4",
+          "#e8f1ec"
+        ]
+      },
+      "night-active": {
+        "role": "neutral",
+        "displayName": "Night Active",
+        "canonical": "#183225",
+        "tonalRamp": [
+          "#060d09",
+          "#1a2921",
+          "#30483b",
+          "#4d695a",
+          "#6e8a7a",
+          "#91ad9d",
+          "#bbcfc4",
+          "#e7f2eb"
+        ]
+      },
+      "night-ink": {
+        "role": "primary",
+        "displayName": "Night Ink",
+        "canonical": "#FAF7EF",
+        "tonalRamp": [
+          "#0c0b09",
+          "#262521",
+          "#44423c",
+          "#64615a",
+          "#85827b",
+          "#a7a59e",
+          "#cbc9c4",
+          "#efeeec"
+        ]
+      },
+      "night-muted": {
+        "role": "neutral",
+        "displayName": "Night Muted",
+        "canonical": "rgba(250, 247, 239, 0.78)",
+        "tonalRamp": [
+          "#0b0b09",
+          "#252522",
+          "#42433c",
+          "#61625b",
+          "#82837c",
+          "#a5a69f",
+          "#c9cac4",
+          "#eeefec"
+        ]
+      },
+      "night-faint": {
+        "role": "neutral",
+        "displayName": "Night Faint",
+        "canonical": "rgba(250, 247, 239, 0.64)",
+        "tonalRamp": [
+          "#0b0c0a",
+          "#242622",
+          "#40433d",
+          "#5f635b",
+          "#80847c",
+          "#a3a79f",
+          "#c7cac5",
+          "#edefec"
+        ]
+      },
+      "night-sage": {
+        "role": "secondary",
+        "displayName": "Night Sage",
+        "canonical": "#B9C9B8",
+        "tonalRamp": [
+          "#090c08",
+          "#20271f",
+          "#3a4639",
+          "#586657",
+          "#788777",
+          "#9baa9b",
+          "#c2ccc2",
+          "#ebf0ea"
+        ]
+      },
+      "night-warning": {
+        "role": "neutral",
+        "displayName": "Night Warning",
+        "canonical": "#E8DDBF",
+        "tonalRamp": [
+          "#0d0b05",
+          "#2a2516",
+          "#4a412a",
+          "#6a6146",
+          "#8c8266",
+          "#aea58a",
+          "#d0c9b6",
+          "#f2eee4"
+        ]
+      },
+      "night-pill-positive-ink": {
+        "role": "neutral",
+        "displayName": "Night Positive Pill Ink",
+        "canonical": "#C9D8C7",
+        "tonalRamp": [
+          "#090c08",
+          "#20271f",
+          "#3a4639",
+          "#586657",
+          "#798777",
+          "#9ca99a",
+          "#c3ccc2",
+          "#ebf0ea"
+        ]
+      },
+      "night-pill-warning-bg": {
+        "role": "neutral",
+        "displayName": "Night Warning Pill",
+        "canonical": "#2A2A1C",
+        "tonalRamp": [
+          "#0b0b08",
+          "#26261d",
+          "#434335",
+          "#626253",
+          "#838473",
+          "#a6a696",
+          "#cacabf",
+          "#efefe9"
+        ]
+      },
+      "night-hairline-border": {
+        "role": "neutral",
+        "displayName": "Night Border Hairline",
+        "canonical": "rgba(250, 247, 239, 0.11)",
+        "tonalRamp": [
+          "#080c0a",
+          "#1f2822",
+          "#38463d",
+          "#56665c",
+          "#76877d",
+          "#9aaaa0",
+          "#c1ccc5",
+          "#eaf0ec"
+        ]
+      },
+      "night-hairline-control": {
+        "role": "neutral",
+        "displayName": "Night Control Hairline",
+        "canonical": "rgba(250, 247, 239, 0.22)",
+        "tonalRamp": [
+          "#090c0a",
+          "#202722",
+          "#3a453d",
+          "#58655c",
+          "#79867d",
+          "#9ca9a0",
+          "#c2ccc5",
+          "#ebf0ec"
+        ]
+      },
+      "band-glow": {
+        "role": "tertiary",
+        "displayName": "Band Glow",
+        "canonical": "#17382A",
+        "tonalRamp": [
+          "#050d09",
+          "#172a21",
+          "#2b493c",
+          "#486a5a",
+          "#698c7b",
+          "#8dae9e",
+          "#b8d0c4",
+          "#e5f2eb"
+        ]
+      },
+      "band-field": {
+        "role": "tertiary",
+        "displayName": "Band Field",
+        "canonical": "#0D2218",
+        "tonalRamp": [
+          "#070d0a",
+          "#1c2822",
+          "#33473d",
+          "#51675b",
+          "#71897c",
+          "#95ab9f",
+          "#becec5",
+          "#e8f1ec"
+        ]
+      },
+      "band-edge": {
+        "role": "tertiary",
+        "displayName": "Band Edge",
+        "canonical": "#08150E",
+        "tonalRamp": [
+          "#080c0a",
+          "#1f2722",
+          "#38463e",
+          "#56665c",
+          "#77877d",
+          "#9aa9a0",
+          "#c1ccc6",
+          "#eaf0ec"
+        ]
+      },
+      "band-signal": {
+        "role": "tertiary",
+        "displayName": "Band Signal",
+        "canonical": "#7AB88A",
+        "tonalRamp": [
+          "#020f05",
+          "#092d16",
+          "#154e2a",
+          "#337046",
+          "#559266",
+          "#7cb58a",
+          "#aed5b6",
+          "#dff5e4"
+        ]
+      },
+      "band-fault": {
+        "role": "tertiary",
+        "displayName": "Band Fault",
+        "canonical": "#E0866F",
+        "tonalRamp": [
+          "#190502",
+          "#421409",
+          "#702715",
+          "#984530",
+          "#bd6751",
+          "#df8c77",
+          "#f5b9a9",
+          "#ffe6dc"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "wordmark": {
+        "displayName": "Wordmark",
+        "purpose": "The Funnel OS name in the sidebar, sign-in panel and gate."
+      },
+      "display": {
+        "displayName": "Display",
+        "purpose": "The sign-in headline on the forest panel."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The greeting on an empty chat channel."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Page titles in the builder, such as My funnels."
+      },
+      "form-title": {
+        "displayName": "Form Title",
+        "purpose": "Sign in, create account and the approval screen."
+      },
+      "section": {
+        "displayName": "Section",
+        "purpose": "Builder section heads and the page name in the top bar."
+      },
+      "reading": {
+        "displayName": "Reading",
+        "purpose": "The coach's answers, in the 740px column."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Interface text."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Field labels, tabs and small buttons."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Hints, metadata and helper text."
+      },
+      "figure": {
+        "displayName": "Figure",
+        "purpose": "Stat values on the admin page."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "Copy fields, keys and pairing codes."
+      }
+    },
+    "shadows": [
+      {
+        "name": "composer-lift",
+        "value": "0 1px 2px rgba(11,36,24,.04), 0 8px 24px -16px rgba(11,36,24,.25)",
+        "purpose": "The chat composer only."
+      },
+      {
+        "name": "selection-ring",
+        "value": "0 0 0 1px var(--text)",
+        "purpose": "A chosen funnel type, template, asset, font or palette, together with an ink border."
+      },
+      {
+        "name": "step-halo",
+        "value": "0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent)",
+        "purpose": "The running step dot in the build step list."
+      },
+      {
+        "name": "night-band",
+        "value": "0 1px 0 rgba(255,255,255,.05) inset, 0 30px 70px -40px rgba(8,20,13,.7)",
+        "purpose": "The build core."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Shared curve for state changes, the drawer, dialogs and bottom sheets."
+      },
+      {
+        "name": "duration-state",
+        "value": "160ms",
+        "purpose": "Hover, focus and color changes on buttons, rows, fields and cards."
+      },
+      {
+        "name": "duration-press",
+        "value": "120ms",
+        "purpose": "Button press scale to 0.98."
+      },
+      {
+        "name": "duration-dialog",
+        "value": "200ms",
+        "purpose": "Centered dialogs fade in and settle 10px upward."
+      },
+      {
+        "name": "duration-sheet",
+        "value": "220ms",
+        "purpose": "Bottom sheets rise 16px on phones."
+      },
+      {
+        "name": "duration-drawer",
+        "value": "240ms",
+        "purpose": "The sidebar drawer slides in below 860px."
+      },
+      {
+        "name": "blink",
+        "value": "1.1s ease-in-out infinite",
+        "purpose": "The running step dot and the live status dot in the build core."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animations and transitions collapse to 1ms",
+        "purpose": "The build stage and core draw one still frame."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "core-tag",
+        "value": "1100px"
+      },
+      {
+        "name": "drawer",
+        "value": "860px"
+      },
+      {
+        "name": "steps-single",
+        "value": "760px"
+      },
+      {
+        "name": "chat-compact",
+        "value": "700px"
+      },
+      {
+        "name": "core-compact",
+        "value": "640px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Forest Ink action for the one main step on a view, such as New funnel or Approve.",
+      "html": "<button class=\"ds-btn-primary\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\"/></svg>New funnel</button>",
+      "css": ".ds-btn-primary { font-family: var(--font, \"Plus Jakarta Sans\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Arial, sans-serif); display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border: 1px solid var(--primary, #0B2418); border-radius: 2px; background: var(--primary, #0B2418); color: var(--primary-ink, #FAF7EF); font-size: 14.5px; font-weight: 500; cursor: pointer; transition: opacity 160ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms; } .ds-btn-primary:hover { opacity: .9; } .ds-btn-primary:active { transform: scale(.98); } .ds-btn-primary:focus-visible { outline: 2px solid var(--text, #0B2418); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Pill with a control hairline for second actions, such as Try the demo or Compare previews.",
+      "html": "<button class=\"ds-btn-secondary\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6\"/></svg>Try the demo</button>",
+      "css": ".ds-btn-secondary { font-family: var(--font, \"Plus Jakarta Sans\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Arial, sans-serif); display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border: 1px solid var(--control, rgba(11, 36, 24, .22)); border-radius: 999px; background: transparent; color: var(--text, #0B2418); font-size: 14.5px; font-weight: 500; cursor: pointer; transition: background 160ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms; } .ds-btn-secondary:hover { background: var(--raised, #EDEADF); } .ds-btn-secondary:active { transform: scale(.98); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--text, #0B2418); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Labeled 40px field with a control hairline that turns ink on focus.",
+      "html": "<label class=\"ds-field\"><span>Business name</span><input class=\"ds-input\" placeholder=\"Northside Physio\"><small>Shown on your funnel pages.</small></label>",
+      "css": ".ds-field { font-family: var(--font, \"Plus Jakarta Sans\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Arial, sans-serif); display: block; max-width: 360px; color: var(--text, #0B2418); } .ds-field span { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; } .ds-field small { display: block; font-size: 12px; color: var(--faint, #61685C); margin-top: 5px; } .ds-input { width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--control, rgba(11, 36, 24, .22)); border-radius: 3px; background: var(--surface, #FAF7EF); color: inherit; font: inherit; font-size: 14.5px; outline: 0; caret-color: var(--text, #0B2418); transition: border-color 160ms; box-sizing: border-box; } .ds-input::placeholder { color: var(--faint, #61685C); } .ds-input:focus { border-color: var(--text, #0B2418); }"
+    },
+    {
+      "name": "Sidebar Navigation",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Side Paper rail with 34px rows; the active row sits on Sage Wash.",
+      "html": "<nav class=\"ds-side\"><button class=\"ds-new\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\"/></svg>New funnel</button><a class=\"ds-row on\" href=\"#\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 4h18l-7 8.5V19l-4 2v-8.5z\"/></svg><span>My funnels</span></a><p class=\"ds-label\">AI Coach</p><a class=\"ds-row\" href=\"#\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6\"/></svg><span>Ask anything</span></a></nav>",
+      "css": ".ds-side { font-family: var(--font, \"Plus Jakarta Sans\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Arial, sans-serif); width: 268px; padding: 8px; background: var(--side, #F2EFE4); border-right: 1px solid var(--border, rgba(11, 36, 24, .12)); font-size: 14.5px; box-sizing: border-box; } .ds-new { display: flex; align-items: center; gap: 10px; width: 100%; height: 36px; padding: 0 10px; margin-bottom: 6px; border: 1px solid var(--rule, rgba(11, 36, 24, .10)); border-radius: 3px; background: transparent; color: var(--text, #0B2418); font: inherit; font-weight: 500; cursor: pointer; } .ds-new svg { color: var(--sage, #4E6A50); } .ds-new:hover { background: var(--raised, #EDEADF); } .ds-row { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 6px 10px; border-radius: 3px; color: var(--muted, #4F5A4D); text-decoration: none; transition: background 160ms, color 160ms; } .ds-row:hover { background: var(--raised, #EDEADF); color: var(--text, #0B2418); } .ds-row.on { background: var(--active, #E5E9DD); color: var(--text, #0B2418); font-weight: 500; } .ds-row:focus-visible { outline: 2px solid var(--text, #0B2418); outline-offset: 2px; } .ds-label { margin: 0; padding: 14px 10px 6px; font-size: 12px; font-weight: 500; color: var(--faint, #61685C); }"
+    },
+    {
+      "name": "Chips and Status Pills",
+      "kind": "chip",
+      "refersTo": "status-pill",
+      "description": "28px outline chips for topics, 22px tinted pills for status, pill tabs with an ink active state.",
+      "html": "<div class=\"ds-chips\"><span class=\"ds-chip\">Market research</span><span class=\"ds-pill ok\">Approved</span><span class=\"ds-pill\">Waiting</span><button class=\"ds-tab on\">Desktop</button><button class=\"ds-tab\">Phone</button></div>",
+      "css": ".ds-chips { font-family: var(--font, \"Plus Jakarta Sans\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Arial, sans-serif); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; } .ds-chip { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border: 1px solid var(--border, rgba(11, 36, 24, .12)); border-radius: 999px; font-size: 13px; color: var(--muted, #4F5A4D); } .ds-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 500; background: var(--pill-neutral-bg, #F2EFE4); color: var(--pill-neutral-ink, #4F5A4D); } .ds-pill.ok { background: var(--pill-positive-bg, #E5E9DD); color: var(--pill-positive-ink, #2F4A32); } .ds-tab { height: 30px; padding: 0 11px; border: 0; border-radius: 999px; background: transparent; font: inherit; font-size: 13px; color: var(--muted, #4F5A4D); cursor: pointer; } .ds-tab:hover { background: var(--raised, #EDEADF); color: var(--text, #0B2418); } .ds-tab.on { background: var(--text, #0B2418); color: var(--ground, #FAF7EF); font-weight: 500; } .ds-tab:focus-visible { outline: 2px solid var(--text, #0B2418); outline-offset: 2px; }"
+    },
+    {
+      "name": "Builder Card",
+      "kind": "card",
+      "refersTo": "builder-card",
+      "description": "10px card for funnel types, templates and assets; selection adds an ink ring.",
+      "html": "<div class=\"ds-cards\"><button class=\"ds-card on\"><b>Lead funnel</b><span>Opt-in page and thank you page for a free guide.</span><small>2 pages</small></button><button class=\"ds-card\"><b>Sales funnel</b><span>Sales page, order form and thank you page.</span><small>3 pages</small></button></div>",
+      "css": ".ds-cards { font-family: var(--font, \"Plus Jakarta Sans\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Arial, sans-serif); display: grid; grid-template-columns: repeat(2, minmax(0, 220px)); gap: 12px; } .ds-card { display: flex; flex-direction: column; gap: 6px; padding: 14px; text-align: left; border: 1px solid var(--border, rgba(11, 36, 24, .12)); border-radius: 10px; background: var(--surface, #FAF7EF); color: var(--text, #0B2418); font: inherit; font-size: 14.5px; cursor: pointer; transition: border-color 160ms, background 160ms; } .ds-card:hover { border-color: var(--control, rgba(11, 36, 24, .22)); background: var(--raised, #EDEADF); } .ds-card.on { border-color: var(--text, #0B2418); box-shadow: 0 0 0 1px var(--text, #0B2418); } .ds-card:focus-visible { outline: 2px solid var(--text, #0B2418); outline-offset: 2px; } .ds-card b { font-weight: 600; } .ds-card span { font-size: 13px; line-height: 1.45; color: var(--muted, #4F5A4D); } .ds-card small { font-size: 12px; color: var(--faint, #61685C); }"
+    },
+    {
+      "name": "Notice",
+      "kind": "custom",
+      "refersTo": "notice",
+      "description": "Calm error or info notice: ink on Side Paper in a full hairline, with the next step and a link.",
+      "html": "<div class=\"ds-notice\">The AI key was not accepted. <a href=\"#\">Open Settings, then AI keys</a> and paste a fresh key.</div>",
+      "css": ".ds-notice { font-family: var(--font, \"Plus Jakarta Sans\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Arial, sans-serif); max-width: 560px; padding: 12px 14px; border: 1px solid var(--control, rgba(11, 36, 24, .22)); border-radius: 3px; background: var(--side, #F2EFE4); color: var(--text, #0B2418); font-size: 14px; line-height: 1.5; } .ds-notice a { color: inherit; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; } .ds-notice a:hover { color: var(--sage, #4E6A50); }"
+    },
+    {
+      "name": "Chat Composer",
+      "kind": "input",
+      "refersTo": "composer",
+      "description": "22px composer with a soft lift, an ink border on focus and a circular send button.",
+      "html": "<div class=\"ds-composer\"><textarea rows=\"1\" placeholder=\"Ask about your offer, copy or next step\"></textarea><button class=\"ds-send\" aria-label=\"Send\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 19V5M5 12l7-7 7 7\"/></svg></button></div>",
+      "css": ".ds-composer { font-family: var(--font, \"Plus Jakarta Sans\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Arial, sans-serif); display: flex; align-items: flex-end; gap: 8px; max-width: 640px; padding: 10px 10px 8px 16px; border: 1px solid var(--control, rgba(11, 36, 24, .22)); border-radius: 22px; background: var(--surface, #FAF7EF); box-shadow: 0 1px 2px rgba(11,36,24,.04), 0 8px 24px -16px rgba(11,36,24,.25); transition: border-color 160ms; } .ds-composer:focus-within { border-color: var(--text, #0B2418); } .ds-composer textarea { flex: 1; border: 0; outline: 0; resize: none; background: transparent; color: var(--text, #0B2418); font: inherit; font-size: 15px; line-height: 1.5; padding: 6px 0; } .ds-composer textarea::placeholder { color: var(--faint, #61685C); } .ds-send { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--primary, #0B2418); color: var(--primary-ink, #FAF7EF); cursor: pointer; transition: opacity 160ms; } .ds-send:hover { opacity: .9; } .ds-send:focus-visible { outline: 2px solid var(--text, #0B2418); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Ivory Workbench",
+    "overview": "Funnel OS looks like a tidy workbench on warm paper. Ivory pages carry forest green ink, two sages mark the small things, and the one dark object on the bench is the night band where a funnel gets built. The chrome stays quiet so the funnel, the copy and the coach's answers own the screen.\n\nA fixed sidebar holds the builder and the coach, a 60px top bar names the page, and the work sits in a 740px reading column or a 1080px builder pane, which keeps the density calm and even. Depth comes from paper steps and 1px hairlines, so very little floats. State changes take 160ms on one ease curve, and the longer sequences stay inside the build band.\n\nDark mode keeps the same structure in deep forest with ivory ink and a pale sage accent. It follows the system setting until the person picks a theme with the moon button.",
+    "keyCharacteristics": [
+      "One typeface, Plus Jakarta Sans, with tight tracking on anything 22px and up.",
+      "Four paper steps for depth: Ivory Paper, Side Paper, Raised Paper and Sage Wash.",
+      "Nearly square chrome, softer builder cards, round conversation, pills for chips and secondary actions.",
+      "Forest Ink carries all the weight; the sages mark small icons, list markers and states.",
+      "Two night bands that stay deep forest in both themes."
+    ],
+    "rules": [
+      {
+        "name": "The One Ink Rule",
+        "body": "Forest Ink is the only heavy color in the light theme. Primary buttons, the active tab, the running step and error text all use it, so weight always means the same thing.",
+        "section": "colors"
+      },
+      {
+        "name": "The Calm Error Rule",
+        "body": "Errors and warnings are ink on Side Paper inside a 1px control hairline, with a next step and a link to the fix. Red and amber stay out of the chrome. Band Fault appears only inside the build core.",
+        "section": "colors"
+      },
+      {
+        "name": "The Night Band Rule",
+        "body": "The build stage and the build core stay deep forest in light and dark mode. Glass, glow and Band Signal live there and nowhere else.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Family Rule",
+        "body": "Plus Jakarta Sans sets the whole interface. To change it, edit the font variable at the top of css/app.css and the Google Fonts link in index.html.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tight Large Type Rule",
+        "body": "Type at 22px and up tracks between -0.03em and -0.04em with line height between 1.04 and 1.2. Body text keeps normal tracking.",
+        "section": "typography"
+      },
+      {
+        "name": "The Hairline Rule",
+        "body": "Cards, menus and dialogs separate with a 1px hairline and a paper step. A new shadow needs a job the four above do not cover.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Corner Family Rule",
+        "body": "Take the corner from the object's family: chrome, builder card or conversation. Two families inside one component reads as a mistake.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "**Do** keep one primary action per view in Forest Ink with 2px corners.",
+      "**Do** give every error a next step and a link to the place to fix it, inside a notice.",
+      "**Do** use Deep Sage and Field Sage for icons, list markers, citations, done states and the selection highlight.",
+      "**Do** take every color from the theme variables at the top of css/app.css so light and dark stay in step.",
+      "**Do** keep state changes at 160ms on the shared ease curve (cubic-bezier(0.22, 1, 0.36, 1)) and honor reduced motion."
+    ],
+    "donts": [
+      "**Don't** add drop shadows to cards, menus or dialogs.",
+      "**Don't** draw a thick colored stripe on one side of a notice or card.",
+      "**Don't** add a second typeface or a red and amber alert palette to the chrome.",
+      "**Don't** round chrome controls past 4px or give pills square corners.",
+      "**Don't** put small uppercase tracked labels above headings.",
+      "**Don't** add glass blur, glow or color gradient fills to paper surfaces."
+    ]
+  }
+}

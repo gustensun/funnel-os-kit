@@ -1,0 +1,11 @@
+{
+  "name": "funnel-os-tests",
+  "private": true,
+  "description": "Local test tools for Funnel OS. Never deployed.",
+  "dependencies": {
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "playwright": "^1.59.0"
+  }
+}
