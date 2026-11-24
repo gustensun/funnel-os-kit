@@ -17,6 +17,6 @@ How to guide me:
      A reply with `"setup": true` means `supabase/setup.sql` ran and nobody has signed up yet. An error that mentions `gai_public` means it has not run yet.
    - After step 4, run `curl -s https://<my app address>/config.js`. If it contains `"error"`, read me the message and help me fix it in Vercel, then remind me to redeploy.
 6. If something fails, find the message in "When something goes wrong" in SETUP.md and walk me through the fix.
-7. At the end, go through "Check that it works" with me and tell me what is done and what is left, like the optional WhatsApp line, the demo account or my own domain.
+7. At the end, go through "Check that it works" with me and tell me what is done and what is left, like the optional WhatsApp line, the HighLevel AI Studio push, the demo account or my own domain.
 
 Do not change any code during setup. If I want to change the look, the coach or the library afterwards, point me to CUSTOMIZE.md.

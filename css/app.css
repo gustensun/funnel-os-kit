@@ -527,10 +527,12 @@ a.btn, .sheet a.btn { text-decoration: none; }
 .fos-assets { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .fos-asset { position: relative; border: 1px solid var(--border); border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 6px; cursor: pointer; }
 .fos-asset > input[type=checkbox] { position: absolute; top: 14px; left: 14px; z-index: 1; width: 16px; height: 16px; }
-.fos-asset img { width: 100%; aspect-ratio: 1; object-fit: contain; background: var(--tile); border-radius: 6px; }
+.fos-asset img { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; background: var(--tile); border-radius: 6px; }
 .fos-asset span { font-size: 12px; color: var(--faint); }
 .fos-asset .input { height: 30px; font-size: 12px; }
-.fos-asset .del { position: absolute; top: 12px; right: 12px; width: 24px; height: 24px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); font-size: 15px; line-height: 1; }
+.fos-asset .del { position: absolute; top: 12px; right: 12px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
+.fos-asset .del svg { width: 13px; height: 13px; }
+.fos-asset .del:hover { color: var(--negative); }
 .fos-docs { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
 .fos-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; max-width: 560px; margin-bottom: 16px; }
 .fos-seg button { border: 1px solid var(--border); border-radius: 10px; padding: 12px; text-align: left; display: flex; flex-direction: column; gap: 2px; }
@@ -599,6 +601,14 @@ a.btn, .sheet a.btn { text-decoration: none; }
 .fos-doc li { margin: 3px 0; }
 .fos-doc a { color: var(--text); }
 .fos-doc .src { font-size: 13px; }
+.fos-review { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin: 0 0 18px; }
+.fos-review > b { display: block; font-weight: 600; }
+.fos-review p { margin: 4px 0 0; }
+.fos-review details { margin-top: 8px; }
+.fos-review summary { cursor: pointer; font-size: 13px; font-weight: 500; }
+.fos-review ol, .fos-review ul { margin: 6px 0 0; }
+.fos-review li.on { font-weight: 500; }
+.fos-review li .pill { height: 18px; font-size: 11px; vertical-align: 1px; }
 .fos-sec { border-left: 2px solid var(--rule); padding: 2px 0 2px 12px; margin: 10px 0; }
 .fos-sec .h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 4px; }
 .fos-sec small { flex: none; font-size: 12px; color: var(--faint); }
@@ -1049,3 +1059,52 @@ a.btn, .sheet a.btn { text-decoration: none; }
 .side-new a.btn { text-decoration: none; }
 .wordmark .ai { margin-left: -4px; }
 @media (max-width: 640px) { .fos-ask-l { display: none; } [data-ask-coach] { padding-inline: 9px; } }
+/* Brand kit: the saved brand every new funnel starts from */
+.kit-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px 16px; flex-wrap: wrap; max-width: 640px; }
+.kit-head .lead { margin-bottom: 14px; text-wrap: pretty; }
+.kit-status { display: inline-flex; align-items: center; gap: 7px; height: 24px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.kit-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--positive); }
+.kit-status.wait::before { background: var(--warning); animation: kit-pulse 900ms ease-in-out infinite alternate; }
+.kit-status.no { color: var(--negative); font-weight: 500; }
+.kit-status.no::before { background: var(--negative); }
+.kit-status.demo::before { background: var(--faint); }
+@keyframes kit-pulse { from { opacity: .35; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .kit-status.wait::before { animation: none; } }
+.kit-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--rule); padding-bottom: 12px; margin: 0 0 26px; }
+.kit-tabs a { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px 0 9px; border-radius: 999px; font-size: 13px; color: var(--muted); text-decoration: none; transition: background var(--t), color var(--t); }
+.kit-tabs a span { font-size: 11px; color: var(--sage); font-variant-numeric: tabular-nums; font-weight: 500; }
+.kit-tabs a:hover { color: var(--text); background: var(--raised); }
+.kit-tabs a.on { color: var(--text); background: var(--active); font-weight: 500; }
+.kit-tabs a.on span { color: var(--text); }
+/* The sidebar lists the tabs on wide screens. On phones the row scrolls sideways. */
+@media (min-width: 861px) { .kit-tabs { display: none; } .kit-head { border-bottom: 1px solid var(--rule); margin-bottom: 26px; padding-bottom: 10px; } }
+@media (max-width: 860px) { .kit-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; margin-top: 6px; -webkit-mask-image: linear-gradient(to right, transparent, #000 14px, #000 calc(100% - 14px), transparent); mask-image: linear-gradient(to right, transparent, #000 14px, #000 calc(100% - 14px), transparent); } .kit-tabs::-webkit-scrollbar { display: none; } .kit-tabs a { flex: none; } }
+.kit-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 12px; max-width: 640px; }
+@media (max-width: 560px) { .kit-row { grid-template-columns: minmax(0, 1fr); } }
+.kit-offer { border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px 14px; margin: 0 0 14px; max-width: 640px; }
+.kit-offer .field { max-width: none; }
+.kit-offer .kit-row { max-width: none; }
+.kit-offer-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; min-height: 24px; }
+.kit-offer-top b { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kit-main { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); cursor: pointer; flex: none; }
+.kit-main input { accent-color: var(--primary); width: 15px; height: 15px; margin: 0; }
+.kit-main:has(input:checked) { color: var(--text); font-weight: 500; }
+.kit-foot { font-size: 13px; margin: 14px 0 0; max-width: 640px; }
+.kit-from { font-size: 13px; line-height: 1.5; color: var(--muted); margin: -6px 0 18px; max-width: 640px; }
+.kit-from a { color: var(--text); text-underline-offset: 3px; }
+.fos .link { color: var(--text); text-decoration: underline; text-underline-offset: 3px; font-size: inherit; }
+/* Push to the GitHub repository of an AI Studio project */
+.fos-studio { display: flex; flex-direction: column; margin: 4px 0 0; }
+.fos-studio .field { margin-bottom: 10px; }
+.fos-studio .field[hidden] { display: none; }
+.fos-studio .field small a { color: var(--text); }
+.fos-approve > .field { margin-bottom: 4px; }
+.fos-tokshow { align-self: flex-start; margin: -2px 0 10px; font-size: 13px !important; color: var(--muted) !important; }
+.fos-studio-last { position: relative; font-size: 13px; line-height: 1.5; color: var(--muted); margin: 2px 0 8px; padding-left: 16px; }
+.fos-studio-last::before { content: ""; position: absolute; left: 1px; top: calc(0.75em - 3.5px); width: 7px; height: 7px; border-radius: 50%; background: var(--positive); }
+.fos-studio-last a { color: var(--text); }
+.fos-studio-wrap { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin: 0 0 18px; max-width: 760px; }
+.fos-studio-wrap summary { cursor: pointer; font-size: 14px; font-weight: 500; }
+.fos-studio-wrap[open] summary { margin-bottom: 12px; }
+.fos-studio-wrap .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.fos-studio-wrap .err { margin-top: 10px; }

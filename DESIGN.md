@@ -271,7 +271,7 @@ components:
 
 Funnel OS looks like a tidy workbench on warm paper. Ivory pages carry forest green ink, two sages mark the small things, and the one dark object on the bench is the night band where a funnel gets built. The chrome stays quiet so the funnel, the copy and the coach's answers own the screen.
 
-A fixed sidebar holds the builder and the coach, a 60px top bar names the page, and the work sits in a 740px reading column or a 1080px builder pane, which keeps the density calm and even. Depth comes from paper steps and 1px hairlines, so very little floats. State changes take 160ms on one ease curve, and the longer sequences stay inside the build band.
+A fixed sidebar holds the builder, the brand kit and the coach, a 60px top bar names the page, and the work sits in a 740px reading column or a 1080px builder pane, which keeps the density calm and even. Depth comes from paper steps and 1px hairlines, so very little floats. State changes take 160ms on one ease curve, and the longer sequences stay inside the build band.
 
 Dark mode keeps the same structure in deep forest with ivory ink and a pale sage accent. It follows the system setting until the person picks a theme with the moon button.
 
@@ -401,8 +401,19 @@ Quiet, with Forest Ink reserved for the main action on each view.
 ### Navigation
 - **Sidebar:** Side Paper, 268px wide, with a hairline on the right. Group labels are 12px Lichen in weight 500.
 - **Rows:** 34px tall with 3px corners, Moss text and an 18px line icon. Hover fills Raised Paper with ink text. The active row uses Sage Wash, ink text and weight 500.
+- **Groups:** New funnel and My funnels, then Brand kit with five numbered rows (01 to 05 in 11.5px Deep Sage tabular numbers), then the coach with a Bonus pill (10.5px uppercase Deep Sage on a 1px hairline) and Recent chats. A 12.5px Moss note under a group label says what the group is for.
 - **Overflow:** the sidebar list fades out over its last 18px where it scrolls under the account area.
 - **Mobile:** below 860px a menu button in the top bar slides the sidebar in over a scrim in 240ms.
+
+### Brand kit
+- **Head:** a 640px column with the lead and a save status on the right. On wide screens a hairline closes it, since the sidebar lists the tabs.
+- **Save status:** 12.5px Moss text after a 7px dot. Positive means saved, a pulsing warning dot means saving (still when reduced motion is on), negative means it did not save, and Faint means the demo.
+- **Phone tabs:** below 860px the five tabs show as a row of 30px pills that scrolls sideways, with soft edges.
+- **Offer cards:** 12px corners and a border hairline, up to 640px wide, with the main offer picked by a radio in the card head.
+
+### Approval and copy review
+- **Copy review:** a 10px card with a border hairline above the copy tab. It gives the section count, the average score and the kept rewrites, with the hero headline candidates behind a disclosure.
+- **AI Studio box:** the repository and token fields sit inside the approval card. On a live funnel the same fields open from a Send it to HighLevel AI Studio disclosure with 12px corners.
 
 ### Chat
 - **Your message:** a 20px bubble in Raised Paper, right aligned and up to 560px wide.

@@ -25,17 +25,23 @@ Keep enough contrast between text and background in both modes. Ask your AI tool
 
 The logo is the bolt mark in `favicon.svg` and the "Funnel OS" wordmark in `js/app.js`. Search for `wordmark` to find it.
 
-## Coach channels
+## The sidebar
 
-The channels in the sidebar, like Funnels, Offers and Content, live in `js/channels.js`. Each one has:
+The sidebar is built around the brand kit: **New funnel**, **My funnels**, the five brand kit tabs, then the coach as a bonus with **New chat** and the recent chats. It lives in `shell()` in `js/app.js`. Search for `side-bonus` to rename the Bonus label or drop it.
+
+The five brand kit tabs come from `KIT_TABS` in `js/funnel-os.js`. Each tab saves into one brand kit per member, and every new funnel starts from it. To rename a tab, change its label and keep its short id, which picks the section that tab shows.
+
+## Coach topics
+
+The coach topics, like Funnels, Offers and Content, live in `js/channels.js`. New chat opens Ask anything, and the Ask button on a funnel opens Funnels. Every topic also opens from the address bar, like `/#/c/offers`. Each one has:
 
 - `id`: a short name for the address bar, like `offers`
 - `name` and `blurb`: what members see
-- `focus`: what the coach focuses on in that channel
+- `focus`: what the coach focuses on in that topic
 - `hint`: words that help the coach find the right library passages
 - `starters`: four example questions shown on an empty chat
 
-Add, remove or rename channels there. The browser and the server both read the same file.
+Add, remove or rename topics there. The browser and the server both read the same file. To list the topics in the sidebar again, ask your AI tool to add them under **New chat** in `shell()`.
 
 ## The coach library
 

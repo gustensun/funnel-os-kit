@@ -11,7 +11,8 @@
       "maxDuration": 300
     },
     "api/funnel.js": {
-      "maxDuration": 300
+      "maxDuration": 300,
+      "includeFiles": "node_modules/@sparticuz/chromium/bin/**"
     },
     "api/config.js": {
       "maxDuration": 10

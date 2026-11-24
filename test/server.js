@@ -7,6 +7,7 @@ const ROOT = path.join(__dirname, '..');
 const ENC = crypto.randomBytes(32).toString('base64');
 Object.assign(process.env, { SUPABASE_URL: `http://127.0.0.1:${PORT}/sb`, SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_localtest', GAI_ENC_KEY: ENC, COACH_NAME: 'Jamie Park', COACH_BIO: 'a funnel builder and marketing coach', APP_URL: 'https://funnels.example.com', PPLX_BASE_URL: `http://127.0.0.1:${PORT}/mock`, WA_GRAPH_URL: `http://127.0.0.1:${PORT}/mock-graph`, ELEVEN_BASE_URL: `http://127.0.0.1:${PORT}/mock-xi`, WA_CFG_TTL: '0',
   FOS_VERCEL_API: `http://127.0.0.1:${PORT}/mock-vercel`, FOS_GITHUB_API: `http://127.0.0.1:${PORT}/mock-gh`, FOS_OPENROUTER_API: `http://127.0.0.1:${PORT}/mock-or`, FOS_SHOT_API: `http://127.0.0.1:${PORT}/mock-shot`, FOS_IMAGE_MODELS: 'test/image' });
+process.env.FOS_BG_POLL = process.env.FOS_BG_POLL || '200'; process.env.FOS_SHOT_MOCK = process.env.FOS_SHOT_MOCK || '1';
 const FM = require('./fos-mock');
 // Uses the PGHOST, PGPORT, PGUSER and PGPASSWORD settings of your shell. Defaults: localhost, 5432, postgres.
 const PG = { host: process.env.PGHOST || 'localhost', port: +process.env.PGPORT || 5432, user: process.env.PGUSER || 'postgres', password: process.env.PGPASSWORD };
@@ -74,6 +75,7 @@ async function rest(req, res, fn, body) {
 // Perplexity Agent API stand-in: streams an answer that cites the first two library passages, plus a web link when asked about pricing.
 async function mockAgent(req, res, b) {
   if (req.headers.authorization === 'Bearer bad-key') { res.writeHead(401, { 'Content-Type': 'application/json' }); return res.end('{"error":{"message":"Invalid API key"}}'); }
+  if (b.background) return bgStart(res, b);
   if (!b.stream) { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: 'OK', annotations: [] }] }] })); }
   if (process.env.MOCK_FAIL_MODEL && b.model === process.env.MOCK_FAIL_MODEL) { res.writeHead(500); return res.end('{"error":{"message":"overloaded"}}'); }
   const fos = FM.agentText(b);
@@ -96,6 +98,34 @@ async function mockAgent(req, res, b) {
   ev({ type: 'response.completed', response: { status: 'completed', model: b.model, output: [] } }); res.end();
 }
 
+// Background jobs. The first copy job stops at its length limit halfway, so the next job continues it; the
+// first copy review job fails, so the backup model takes over; the judge's JSON schema is refused once per
+// funnel, so it runs again without it.
+const JOBS = new Map(); let JN = 0; const ONCE = { copy: true, chief: true };
+function bgStart(res, b) {
+  const J = (code, o) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
+  const schema = ((b.response_format || {}).json_schema || {}).name;
+  if (schema === 'fosjudge') { FM.LOG.agent.push({ kind: 'judge', bg: true, schema, rejected: true, model: b.model }); return J(400, { error: { message: 'response_format json_schema is not supported for this model' } }); }
+  const r = FM.reply(b) || { kind: 'other', text: 'OK' };
+  const cont = b.input.length >= 3 && b.input[b.input.length - 2].role === 'assistant';
+  let text = r.text; let final = 'completed';
+  if (cont) { const d = (b.input[b.input.length - 2].content[0] || {}).text || ''; text = text.startsWith(d) ? text.slice(d.length) : text; }
+  else if (r.kind === 'copy' && ONCE.copy) { ONCE.copy = false; final = 'incomplete'; text = text.slice(0, Math.floor(text.length / 2)); }
+  else if (r.kind === 'chief' && ONCE.chief) { ONCE.chief = false; final = 'failed'; }
+  const id = 'bg_' + (++JN);
+  JOBS.set(id, { polls: 0, final, text, model: b.model, kind: r.kind });
+  J(200, { id, status: 'queued', model: b.model, output: [] });
+}
+function mockJob(req, res, u) {
+  const J = (code, o) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
+  const [id, act] = u.pathname.replace('/mock/v1/agent/', '').split('/');
+  const j = JOBS.get(id); if (!j) return J(404, { error: { message: 'Response not found' } });
+  if (act === 'cancel') { j.final = 'cancelled'; j.polls = 9; FM.LOG.cancelled = (FM.LOG.cancelled || 0) + 1; return J(200, { id, status: 'cancelled' }); }
+  j.polls++;
+  if (j.polls < 2) return J(200, { id, status: 'in_progress', model: j.model, output: [] });
+  if (j.final === 'failed') return J(200, { id, status: 'failed', model: j.model, error: { code: 'server_error', message: 'The model is overloaded' }, output: [] });
+  J(200, { id, status: j.final, model: j.model, incomplete_details: j.final === 'incomplete' ? { reason: 'max_output_tokens' } : null, output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: j.text, annotations: [] }] }] });
+}
 
 // WhatsApp Cloud API stand-in.
 function mockGraph(req, res, u, raw) {
@@ -135,6 +165,8 @@ const server = http.createServer(async (req, res) => {
   try {
     if (u.pathname.startsWith('/sb/rest/v1/rpc/')) return rest(req, res, u.pathname.split('/').pop(), b);
     if (u.pathname === '/mock/v1/agent') return mockAgent(req, res, b);
+    if (u.pathname.startsWith('/mock/v1/agent/')) return mockJob(req, res, u);
+    if (u.pathname === '/test/env') { for (const [k, v] of Object.entries(b || {})) process.env[k] = String(v); res.end('{}'); return; }
     if (u.pathname === '/mock/v1/decisions') return FM.decisions(req, res, b);
     if (u.pathname.startsWith('/mock-vercel/')) return FM.vercel(req, res, u, b);
     if (u.pathname.startsWith('/mock-gh/')) return FM.github(req, res, u, b);
@@ -142,6 +174,7 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname.startsWith('/mock-shot')) return FM.shot(req, res, u, PORT);
     if (u.pathname.startsWith('/mock-gallery')) return FM.gallery(req, res, u);
     if (u.pathname === '/test/fos') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(FM.LOG)); }
+    if (u.pathname === '/test/studio') { if (req.method === 'POST') FM.resetStudio(); res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(FM.studioState(u.searchParams.get('repo') || 'me/studio'))); }
     if (u.pathname.startsWith('/mock-graph/')) return mockGraph(req, res, u, raw);
     if (u.pathname.startsWith('/mock-xi/')) return mockXi(req, res, u);
     if (u.pathname === '/test/sent') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(SENT)); }

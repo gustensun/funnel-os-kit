@@ -11,6 +11,8 @@ const MOTION = require('./_motion');
 const COLLECT = require('./_collect');
 let GFX = null; const gfx = () => GFX || (GFX = require('./_gfx'));
 const LIBR = require('./_library');
+const PACKS = require('./_fos_packs');
+const SCHEMA = require('./_fos_schema');
 
 const PPLX = () => process.env.PPLX_BASE_URL || 'https://api.perplexity.ai';
 const VERCEL = () => process.env.FOS_VERCEL_API || 'https://api.vercel.com';
@@ -18,6 +20,8 @@ const GH = () => process.env.FOS_GITHUB_API || 'https://api.github.com';
 const OR = () => process.env.FOS_OPENROUTER_API || 'https://openrouter.ai/api/v1';
 const SHOT = () => process.env.FOS_SHOT_API || 'https://api.microlink.io';
 const BUILDER = process.env.FOS_BUILDER || 'anthropic/claude-opus-5-5';
+// The brand kit is stored as a private file of the owner. It never ships with a page.
+const KIT_FILE = 'fos-context.svg';
 const ADMIN_FIX = (label) => ({ label: label || 'Open Members and settings', href: '/#admin', admin: true });
 
 /* ---------- catalog ---------- */
@@ -121,34 +125,127 @@ function parseJSON(t) {
   catch { throw bad('The AI answer was cut off or malformed. It retries on the next run.', 502); }
 }
 
-// One generation that can run longer than one function run. The text so far is saved in work.drafts[key],
-// and the next run asks the model to carry on from the exact character. Returns { text } or { pending: true }.
-async function gen(ctx, key, system, user, { max = 8000, model, tools, steps } = {}) {
-  const w = ctx.work; w.drafts = w.drafts || {}; w.cont = w.cont || {};
+// One generation that can run longer than one function run. Returns { text, pages } or { pending: true }.
+// Options: max, model, tools, steps; think (how hard the model thinks first: low, medium, high); schema (the JSON
+// shape the answer must match); bg (run it as a background job); images ([{ media_type, data }] for the first message).
+// `user` can be a function returning the prompt. It runs only when a new request starts, so lookups are skipped
+// while a job is still going. It gets true for a fresh start and false when the request continues a draft.
+async function gen(ctx, key, system, user, opt = {}) {
+  if (opt.bg && !ctx.work.nobg) return bgGen(ctx, key, system, user, opt);
+  return streamGen(ctx, key, system, user, opt);
+}
+async function msgsFor(user, d, images) {
+  const u = typeof user === 'function' ? await user(!d) : user;
+  const im = d ? null : typeof images === 'function' ? await images() : images;
+  const msgs = [{ role: 'user', text: u, ...(im && im.length ? { images: im } : {}) }];
+  if (d) msgs.push({ role: 'assistant', text: d }, { role: 'user', text: CONTINUE });
+  return msgs;
+}
+// Thinking and the JSON schema only go with a fresh request. A continuation is plain text that picks up mid-answer.
+const extraFor = (w, key, d, opt) => (d || (w.plain || {})[key] ? {} : { reasoning: opt.think, format: opt.schema });
+const kbOf = (t) => Math.round(String(t || '').length / 1024);
+const joinDraft = (d, add) => d + (d ? String(add || '').replace(/^\s*```(?:html|json)?\s*/i, '') : String(add || ''));
+
+// The text so far is saved in work.drafts[key], and the next run asks the model to carry on from the exact character.
+async function streamGen(ctx, key, system, user, opt) {
+  const { max = 8000, model, tools, steps } = opt;
+  const w = ctx.work; w.drafts = w.drafts || {}; w.cont = w.cont || {}; w.plain = w.plain || {};
   const d = w.drafts[key] || '';
   const left = ctx.deadline - Date.now() - 6000;
   if (left < 25000) return { pending: true };
-  const msgs = [{ role: 'user', text: user }];
-  if (d) msgs.push({ role: 'assistant', text: d }, { role: 'user', text: CONTINUE });
+  const msgs = await msgsFor(user, d, opt.images);
+  const extra = extraFor(w, key, d, opt);
   const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), left);
   let got = ''; let res = null; let err = null;
   const m = model || ctx.K.model;
-  try { res = await AI.stream(ctx.K.ai, m, system, msgs, (x) => { got += x; }, { max, web: false, signal: ac.signal, tools, steps }); }
+  try { res = await AI.stream(ctx.K.ai, m, system, msgs, (x) => { got += x; }, { max, web: false, signal: ac.signal, tools, steps, ...extra }); }
   catch (e) { err = e; }
   finally { clearTimeout(timer); }
   if (err && !ac.signal.aborted && got.length < 400) {
+    // A model that refuses the thinking or schema settings gets the same request without them.
+    if (!d && err.status === 400 && (extra.reasoning || extra.format)) { w.plain[key] = 1; return streamGen(ctx, key, system, user, opt); }
     // Nothing useful came back. A second model gets one try when the first failed fast.
-    if (!d && err.retryable && Date.now() < ctx.deadline - 60000 && m !== AI.backup(m)) return gen(ctx, key, system, user, { max, model: AI.backup(m), tools, steps });
+    if (!d && err.retryable && Date.now() < ctx.deadline - 60000 && m !== AI.backup(m)) return streamGen(ctx, key, system, user, { ...opt, model: AI.backup(m) });
     throw err;
   }
-  let add = got; if (d) add = add.replace(/^\s*```(?:html|json)?\s*/i, '');
-  const full = d + add;
+  const full = joinDraft(d, got);
   const finished = res && !err && res.stop !== 'max_tokens';
-  if (finished) { delete w.drafts[key]; delete w.cont[key]; return { text: full, pages: res.pages || [] }; }
+  if (finished) { delete w.drafts[key]; delete w.cont[key]; delete w.plain[key]; return { text: full, pages: res.pages || [] }; }
   w.cont[key] = (w.cont[key] || 0) + 1;
   if (w.cont[key] > 5) { delete w.drafts[key]; delete w.cont[key]; throw bad('The AI kept stopping before it finished. Press Try again to start this step fresh.', 502); }
   w.drafts[key] = full;
-  return { pending: true, kb: Math.round(full.length / 1024) };
+  return { pending: true, kb: kbOf(full) };
+}
+
+// A background job keeps working on the AI side between function runs, so long pages and deep thinking are
+// never cut off by a run ending. The job id is saved right away and every run checks in until it is done.
+// An answer cut off by its length limit carries on in a new job from the exact character.
+const BG_POLL = () => +process.env.FOS_BG_POLL || 5000;
+const BG_MAX = 30 * 60000;
+async function bgGen(ctx, key, system, user, opt) {
+  const { max = 8000, model, tools, steps } = opt;
+  const w = ctx.work; w.bg = w.bg || {}; w.drafts = w.drafts || {}; w.cont = w.cont || {}; w.plain = w.plain || {}; w.bgm = w.bgm || {};
+  let job = w.bg[key];
+  if (!job) {
+    if (ctx.deadline - Date.now() < 40000) return { pending: true, kb: kbOf(w.drafts[key]) };
+    const d = w.drafts[key] || '';
+    const m = w.bgm[key] || model || ctx.K.model;
+    const msgs = await msgsFor(user, d, opt.images);
+    const extra = extraFor(w, key, d, opt);
+    let s;
+    try { s = await AI.start(ctx.K.ai, m, system, msgs, { max, tools, steps, ...extra }); }
+    catch (e) {
+      if (e.status === 400 && (extra.reasoning || extra.format)) { w.plain[key] = 1; return bgGen(ctx, key, system, user, opt); }
+      // No background mode on this account or model: write it in the stream like before.
+      if ([400, 404, 405, 422, 501].includes(e.status)) { w.nobg = 1; return streamGen(ctx, key, system, user, opt); }
+      throw e;
+    }
+    job = w.bg[key] = { id: s.id, model: m, at: Date.now() };
+    if (ctx.persist) ctx.persist();
+    if (s.status !== 'queued' && s.status !== 'in_progress') return bgSettle(ctx, key, system, user, opt, job, s);
+  }
+  while (Date.now() < ctx.deadline - 15000 - BG_POLL()) {
+    await sleep(BG_POLL());
+    let s;
+    try { s = await AI.poll(ctx.K.ai, job.id); }
+    catch (e) {
+      if (e.status === 404) { delete w.bg[key]; return bgGen(ctx, key, system, user, opt); }
+      if (e.retryable) continue;
+      throw e;
+    }
+    if (s.status === 'queued' || s.status === 'in_progress') {
+      if (Date.now() - job.at > BG_MAX) {
+        await AI.cancel(ctx.K.ai, job.id); delete w.bg[key]; delete w.drafts[key]; delete w.cont[key];
+        throw bad('The AI worked on this step for more than 30 minutes without finishing. Press Try again to start it fresh.', 504);
+      }
+      continue;
+    }
+    return bgSettle(ctx, key, system, user, opt, job, s);
+  }
+  return { pending: true, kb: kbOf(w.drafts[key]), mins: Math.max(1, Math.round((Date.now() - job.at) / 60000)) };
+}
+async function bgSettle(ctx, key, system, user, opt, job, s) {
+  const w = ctx.work; delete w.bg[key];
+  const d = w.drafts[key] || '';
+  if (s.status === 'completed' && s.stop !== 'max_tokens') {
+    const full = joinDraft(d, s.text);
+    delete w.drafts[key]; delete w.cont[key]; delete w.plain[key]; delete w.bgm[key];
+    if (ctx.persist) ctx.persist();
+    return { text: full, pages: s.pages || [] };
+  }
+  if (s.status === 'incomplete' || s.stop === 'max_tokens') {
+    w.cont[key] = (w.cont[key] || 0) + 1;
+    if (w.cont[key] > 5) { delete w.drafts[key]; delete w.cont[key]; throw bad('The AI kept stopping before it finished. Press Try again to start this step fresh.', 502); }
+    w.drafts[key] = joinDraft(d, s.text);
+    if (ctx.persist) ctx.persist();
+    return bgGen(ctx, key, system, user, opt);
+  }
+  // Failed or cancelled. Key and credit problems stop here with their own message; anything else gets one more
+  // try with the backup model, then a plain message with the next step.
+  if (s.error) throw s.error;
+  if (!w.bgm[key] && AI.backup(job.model) !== job.model) { w.bgm[key] = AI.backup(job.model); return bgGen(ctx, key, system, user, opt); }
+  delete w.bgm[key]; delete w.drafts[key]; delete w.cont[key];
+  throw bad('The AI stopped with an error on this step. Press Try again to run it once more.', 502);
 }
 async function genJSON(ctx, key, system, user, opt) {
   const r = await gen(ctx, key, system, user, opt);
@@ -164,8 +261,11 @@ function brief(f, short) {
     `BUSINESS: ${q.brand || f.title}${q.tagline ? ' (' + q.tagline + ')' : ''}`,
     `FUNNEL TYPE: ${T.name}. Goal: ${T.goal}.`,
     `PAGES: ${pagesOf(f).map((p) => p.name + ' (' + p.path + ')').join(', ')}`,
+    q.offer_name || q.price ? `OFFER: ${[q.offer_name, q.price ? 'price ' + q.price : ''].filter(Boolean).join(', ')}` : '',
     `WHAT THEY SELL, IN THEIR WORDS:\n${String(q.offer || '').slice(0, short ? 2500 : 6000)}`,
     q.audience ? `WHO IT IS FOR: ${clip(q.audience, 800)}` : '',
+    q.voice ? `BRAND VOICE (write every line like this): ${clip(q.voice, 600)}` : '',
+    q.avoid ? `WORDS AND CLAIMS TO AVOID (never use these): ${clip(q.avoid, 600)}` : '',
     q.owner ? `OWNER OR FACE OF THE BRAND: ${clip(q.owner, 300)}` : '',
     proofLine(q),
     laterLine(q),
@@ -242,8 +342,8 @@ async function coaching(jwt, q) {
 }
 
 /* ---------- steps ---------- */
-const ORDER = ['research', 'collect', 'offer', 'copy', 'wireframe', 'brand', 'graphics', 'build', 'preview', 'qa', 'fix', 'done'];
-const LABEL = { research: 'Market research', collect: 'Product images', offer: 'Offer', copy: 'Copy', wireframe: 'Wireframe', brand: 'Branding', graphics: 'Graphics', build: 'Building', preview: 'Live previews', qa: 'Quality check', fix: 'Fixes', done: 'Ready for review', revise: 'Changes', publish: 'Publishing' };
+const ORDER = ['research', 'collect', 'offer', 'copy', 'chief', 'wireframe', 'brand', 'graphics', 'build', 'preview', 'qa', 'fix', 'done'];
+const LABEL = { research: 'Market research', collect: 'Product images', offer: 'Offer', copy: 'Copy', chief: 'Copy review', wireframe: 'Wireframe', brand: 'Branding', graphics: 'Graphics', build: 'Building', preview: 'Live previews', qa: 'Quality check', fix: 'Fixes', done: 'Ready for review', revise: 'Changes', publish: 'Publishing' };
 
 async function stepResearch(ctx) {
   const f = ctx.f;
@@ -252,7 +352,7 @@ async function stepResearch(ctx) {
   const urls = (q.urls || []).slice(0, 5);
   const want = '{"summary":"3 sentences on the market and where this offer fits","audience":{"who":"","pains":["5 pains in their words"],"desires":["4"],"objections":["5 real buying objections"],"words":["8 phrases buyers actually use"]},"competitors":[{"name":"","offer":"","price":"","angle":"","url":""}],"price_range":"","angles":["5 angles that could lead the page, strongest first"],"gaps":["3 things competitors do not say that this business can"],"about":{"bio":"what their own pages say about them","credentials":[""],"proof":["testimonials or results found on their own pages, quoted exactly, with the name"],"numbers":["real numbers found on their pages"]},"sources":[{"title":"","url":""}]}';
   const user = `${brief(f, true)}\n\nResearch this market with web search.${urls.length ? ` First read their own pages with fetch_url (${urls.join(', ')}) and collect facts about them: bio, credentials, real testimonials and numbers, exactly as written.` : ''} Then find 5 to 8 competing offers with price, angle and URL, the buyer's pains, desires and objections in their own words (reviews, forums, Reddit, YouTube comments), typical prices, and the angles working right now. Return only JSON in this shape: ${want}`;
-  const r = await genJSON(ctx, 'research', SYS + ' You research markets for funnels and cite real sources.', user, { max: 5000, tools: [{ type: 'web_search' }, { type: 'fetch_url' }], steps: 10 });
+  const r = await genJSON(ctx, 'research', SYS + ' You research markets for funnels and cite real sources.', user, { max: 5000, tools: [{ type: 'web_search' }, { type: 'fetch_url' }], steps: 10, schema: SCHEMA.research });
   if (r.pending) return { pending: true, note: 'Still researching' };
   const j = r.json || {};
   const srcs = [...(r.pages || []), ...(Array.isArray(j.sources) ? j.sources : [])].filter((s) => s && /^https?:\/\//.test(s.url || ''));
@@ -278,18 +378,21 @@ async function stepCollect(ctx) {
   return { patch: { visuals: v }, note: note + (bad.length ? `. Could not open ${bad.map((x) => x.url).join(', ')}; check the link is public` : '') };
 }
 
-const OFFER_SHAPE = '{"name":"","one_liner":"","promise":"","audience":"","mechanism":{"name":"","steps":[{"name":"","what":""}]},"price":{"amount":0,"currency":"USD","compare_at":null,"note":"","plans":[{"label":"","amount":0,"every":""}]},"stack":[{"name":"","what":"","value":0}],"bonuses":[{"name":"","what":"","value":0}],"guarantee":{"name":"","days":0,"terms":""},"cta":"","urgency":"","lead_magnet":"","upsells":[{"page":"upsell","name":"","price":0,"what":""}],"changes":"one sentence on what you sharpened"}';
+const OFFER_SHAPE = '{"name":"","one_liner":"","promise":"","audience":"","transformation":{"before":"","after":""},"timeline":{"first_win":"","result":""},"mechanism":{"name":"","steps":[{"name":"","what":""}]},"price":{"amount":0,"currency":"USD","compare_at":null,"note":"","plans":[{"label":"","amount":0,"every":""}]},"stack":[{"name":"","what":"","value":0}],"bonuses":[{"name":"","what":"","value":0}],"guarantee":{"name":"","days":0,"terms":""},"cta":"","urgency":"","lead_magnet":"","bump":null,"upsells":[{"page":"upsell","name":"","price":0,"what":""}],"changes":"one sentence on what you sharpened"}';
 async function stepOffer(ctx) {
-  const f = ctx.f;
+  const f = ctx.f; const paths = pagesOf(f).map((p) => p.path);
   const notes = ctx.work.coach_offer || (ctx.work.coach_offer = await coaching(ctx.jwt, 'offer stack value stack bonuses guarantee price anchor transformation timeline trust'));
-  const user = `${brief(f)}\n\nRESEARCH:\n${JSON.stringify(f.research || {}).slice(0, 8000)}\n\n${notes ? 'OFFER FRAMEWORKS FROM THE COACHING LIBRARY (use the thinking, never quote or name the source):\n' + notes + '\n\n' : ''}${(f.quiz || {}).improve_offer === false ? `Turn what they sell into the final offer for this ${(TYPES[f.funnel_type] || {}).name || 'funnel'}, keeping their offer as they wrote it: same name, stack items and bonuses, no new items. Only structure it, fill in short descriptions and fair standalone values, and name the method from what they described.` : `Turn what they sell into the final offer for this ${(TYPES[f.funnel_type] || {}).name || 'funnel'} and improve the offer stack. Use a clear Transformation, a believable Timeline and Trust. Name the method with 3 to 5 steps. Build a value stack where each item answers an objection from the research, with honest standalone values. Bonuses only if they help the buyer act faster.`} Keep their price, payment options, guarantee and every fact exactly as given. If no price is given, choose one inside the research price range and say why in changes. Urgency only if it is real. lead_magnet only for lead, webinar and challenge funnels. upsells only for pages named upsell, upsell-2 or vip in the page list.\nReturn only JSON: ${OFFER_SHAPE}`;
-  const r = await genJSON(ctx, 'offer', SYS, user, { max: 4000, model: BUILDER });
-  if (r.pending) return { pending: true, note: 'Still shaping the offer' };
+  const keep = (f.quiz || {}).improve_offer === false;
+  const user = `${brief(f)}\n\nRESEARCH:\n${JSON.stringify(f.research || {}).slice(0, 8000)}\n\n${PACKS.OFFER}\n\n${notes ? 'MORE OFFER NOTES FROM THE COACHING LIBRARY (use the thinking, never quote or name the source):\n' + notes + '\n\n' : ''}${keep ? `Turn what they sell into the final offer for this ${(TYPES[f.funnel_type] || {}).name || 'funnel'}, keeping their offer as they wrote it: same name, stack items and bonuses, no new items. Only structure it, fill in short descriptions and fair standalone values, the transformation and the timeline, and name the method from what they described.` : `Turn what they sell into the final offer for this ${(TYPES[f.funnel_type] || {}).name || 'funnel'} and improve the offer stack with the playbook above. Make the transformation concrete and the timeline believable, name the method with 3 to 5 steps, build a value stack where each item answers an objection from the research with honest standalone values, and add bonuses only when they make the result faster, easier or safer.`} Think it through before you answer: which beliefs the buyer still lacks, which objections from the research the stack must answer, and what this price point asks of the funnel.\nKeep their price, payment options, guarantee and every fact exactly as given. If no price is given, choose one inside the research price range and say why in changes. compare_at only when they gave an original price, else null. Urgency only if it is real, else empty. lead_magnet only for lead, webinar and challenge funnels, else empty. bump only when the page list has an order or checkout page${paths.some((x) => x === 'order' || x === 'checkout') ? ' (it does here)' : ' (it does not here, so null)'}. upsells only for pages named upsell, upsell-2 or vip in the page list (${paths.join(', ')}).\nReturn only JSON: ${OFFER_SHAPE}`;
+  const r = await genJSON(ctx, 'offer', SYS, user, { max: 5000, model: BUILDER, think: 'high', schema: SCHEMA.offer, bg: true });
+  if (r.pending) return { pending: true, note: 'Still shaping the offer' + (r.mins ? ` (thinking for ${r.mins} min)` : '') };
   const o = r.json || {}; o.price = o.price || {}; o.price.amount = num(o.price.amount); o.price.compare_at = num(o.price.compare_at);
   o.price.currency = /^[A-Z]{3}$/.test(o.price.currency || '') ? o.price.currency : 'USD';
   o.price.plans = (o.price.plans || []).filter((p) => num(p.amount)).map((p) => ({ ...p, amount: num(p.amount) }));
   o.stack = (o.stack || []).filter((x) => x && x.name).slice(0, 9); o.bonuses = (o.bonuses || []).filter((x) => x && x.name).slice(0, 4);
-  return { patch: { offer: o }, note: `${o.name || 'Offer'}${o.price.amount ? ', ' + o.price.currency + ' ' + o.price.amount : ''}. ${o.stack.length} stack items, ${o.bonuses.length} bonuses.` };
+  o.bump = o.bump && o.bump.name && paths.some((x) => x === 'order' || x === 'checkout') ? { ...o.bump, price: num(o.bump.price) } : null;
+  o.upsells = (o.upsells || []).filter((u) => u && u.name && paths.includes(u.page)).map((u) => ({ ...u, price: num(u.price) }));
+  return { patch: { offer: o }, note: `${o.name || 'Offer'}${o.price.amount ? ', ' + o.price.currency + ' ' + o.price.amount : ''}. ${o.stack.length} stack items, ${o.bonuses.length} bonuses${o.bump ? ', an order bump' : ''}${o.upsells.length ? ', ' + o.upsells.length + ' upsell' + (o.upsells.length > 1 ? 's' : '') : ''}.` };
 }
 
 const SECTION_SHAPE = '{"id":"short-kebab-id","p":"which of the 17P or the page purpose","eyebrow":"","headline":"one *accent phrase* allowed","sub":"","body":["short paragraphs"],"bullets":[""],"items":[{"title":"","body":"","meta":""}],"cta":"","note":""}';
@@ -304,13 +407,75 @@ async function stepCopy(ctx) {
     }
     return `- ${p.path} (${p.name}): ${PAGE_GUIDE[p.path] || PAGE_GUIDE[p.path.replace(/-\d+$/, '')] || 'A focused page that moves the visitor to the next step.'}`;
   }).join('\n');
-  const user = `${brief(f)}\n\nRESEARCH:\n${JSON.stringify(f.research || {}).slice(0, 7000)}\n\nFINAL OFFER:\n${JSON.stringify(f.offer || {}).slice(0, 6000)}\n\n${notes ? 'COPY FRAMEWORKS FROM THE COACHING LIBRARY (use the thinking, never quote or name the source):\n' + notes + '\n\n' : ''}Write the copy for every page of this funnel:\n${guide}\nRules:\n- The hero headline is the strongest angle from the research, under 12 words, with one phrase wrapped in *asterisks* for the accent color.\n- Mirror the buyer words from the research. Short paragraphs, one idea each. Scannable bullets.\n- Proof only from the PROOF instructions above or facts found about them. Numbers only when real.\n- Forms, checkout, calendars and videos are slots the owner connects later: write the labels and helper text for them, not the integrations.\n- Every page ends with a clear next step.\nReturn only JSON: {"meta":{"site_title":"","description":""},"pages":[{"path":"index","name":"","title":"","description":"","sections":[${SECTION_SHAPE}]}]}`;
-  const r = await genJSON(ctx, 'copy', SYS, user, { max: 14000, model: BUILDER });
-  if (r.pending) return { pending: true, note: `Still writing the copy (${r.kb || 0} KB so far)` };
+  const user = `${brief(f)}\n\nRESEARCH:\n${JSON.stringify(f.research || {}).slice(0, 7000)}\n\nFINAL OFFER:\n${JSON.stringify(f.offer || {}).slice(0, 6000)}\n\n${PACKS.COPY}\n\n${notes ? 'MORE COPY NOTES FROM THE COACHING LIBRARY (use the thinking, never quote or name the source):\n' + notes + '\n\n' : ''}Write the copy for every page of this funnel:\n${guide}\nBefore you write, think it through: the buyer's awareness, the one big idea of the main page, the order of the arguments, and where each objection from the research gets answered. Then write.\nRules:\n- The hero headline is the strongest angle from the research, 12 words or fewer, with one phrase wrapped in *asterisks* for the accent color.\n- Mirror the buyer words from the research. Short paragraphs, one idea each. Scannable bullets.\n- Proof only from the PROOF instructions above or facts found about them. Numbers only when real.\n- Use the offer exactly: its name, method, stack, bonuses, price, guarantee${(f.offer || {}).bump ? ', the order bump on the order page' : ''}${((f.offer || {}).upsells || []).length ? ' and the upsells on their pages' : ''}.\n- Forms, checkout, calendars and videos are slots the owner connects later: write the labels and helper text for them, not the integrations.\n- Every page ends with a clear next step.\nReturn only JSON: {"meta":{"site_title":"","description":""},"pages":[{"path":"index","name":"","title":"","description":"","sections":[${SECTION_SHAPE}]}]}`;
+  const r = await genJSON(ctx, 'copy', SYS, user, { max: 14000, model: BUILDER, think: 'high', schema: SCHEMA.copy, bg: true });
+  if (r.pending) return { pending: true, note: r.kb ? `Still writing the copy (${r.kb} KB so far)` : `Thinking through the copy${r.mins ? ' (' + r.mins + ' min so far)' : ''}` };
   const c = r.json || {}; c.pages = (c.pages || []).filter((p) => p && pages.some((x) => x.path === p.path));
   for (const p of pages) if (!c.pages.some((x) => x.path === p.path)) c.pages.push({ path: p.path, name: p.name, sections: [] });
   const words = JSON.stringify(c.pages).replace(/"[a-z_]+":/g, ' ').split(/\s+/).length;
   return { patch: { copy: c }, note: `${c.pages.length} pages, ${c.pages.reduce((a, p) => a + (p.sections || []).length, 0)} sections, about ${Math.round(words / 50) * 50} words` };
+}
+
+// The copy review. A copy chief pass scores every section, rewrites the weak ones and writes seven hero
+// headlines from different angles. A judge on a second model then keeps the better version of each rewrite
+// (the first draft wins when a rewrite adds anything that is not in the facts) and picks the headline.
+const heroOf = (c) => { const p = (c.pages || []).find((x) => x.path === 'index') || (c.pages || [])[0]; const ss = (p && p.sections) || []; return ss.find((x) => x.id === 'hero') || ss[0] || null; };
+function cleanHead(h) {
+  const t = String(h || '').replace(/^\s*\d+[.)]\s*/, '').replace(/^["'\u201c]+|["'\u201d]+$/g, '').replace(/\s*[\u2014\u2013]\s*/g, ', ').replace(/!/g, '.').replace(/\s+/g, ' ').trim();
+  return t && t.replace(/\*/g, '').split(' ').length <= 14 ? t : '';
+}
+function cleanSection(x) {
+  const str = (v) => (typeof v === 'string' ? v : v == null ? '' : String(v));
+  const list = (v) => (Array.isArray(v) ? v.map(str).filter(Boolean) : v ? [str(v)] : []);
+  return { ...x, eyebrow: str(x.eyebrow), headline: str(x.headline), sub: str(x.sub), body: list(x.body), bullets: list(x.bullets), items: (Array.isArray(x.items) ? x.items : []).filter((i) => i && (i.title || i.body)).map((i) => ({ title: str(i.title), body: str(i.body), meta: str(i.meta) })), cta: str(x.cta), note: str(x.note) };
+}
+async function stepChief(ctx) {
+  const f = ctx.f; const w = ctx.work; const c = f.copy || {};
+  if (!(c.pages || []).some((p) => (p.sections || []).length)) return { note: 'No copy to review yet' };
+  const skip = (e) => ({ note: `Copy review skipped (${clip(e.message, 140)}). The first draft is used.` });
+  if (!w.chief) {
+    const pm = proofMode(f.quiz || {});
+    const user = `${brief(f)}\n\nRESEARCH:\n${JSON.stringify(f.research || {}).slice(0, 6000)}\n\nFINAL OFFER:\n${JSON.stringify(f.offer || {}).slice(0, 5000)}\n\nREAL PROOF YOU MAY USE: ${pm === 'none' ? 'none' : clip((f.quiz || {}).proof || 'none', 1500)}\n\n${PACKS.COPY}\n\n${PACKS.CHIEF}\n\nTHE COPY TO REVIEW, EVERY PAGE OF THE FUNNEL:\n${JSON.stringify(c.pages).slice(0, 60000)}\n\nReview it as the copy chief who signs it off for paid traffic. Score every section of every page. Rewrite in full each section that scores 7 or lower or hits a rewrite trigger, keeping its id, p and fields. Leave strong sections out of rewrites. Write the 7 hero headline candidates for the main page. Return only JSON: {"scores":[{"path":"index","id":"","score":0,"why":"one line"}],"headlines":["seven candidates"],"rewrites":[{"path":"index","why":"what you fixed","section":${SECTION_SHAPE}}],"summary":"two sentences on the biggest changes"}`;
+    let r;
+    try { r = await genJSON(ctx, 'chief', SYS, user, { max: 16000, model: BUILDER, think: 'high', schema: SCHEMA.chief, bg: true }); }
+    catch (e) { if (e.code !== 503 && ((w.tries || {}).chief || 0) >= 1) return skip(e); throw e; }
+    if (r.pending) return { pending: true, note: r.kb ? `Rewriting the weak sections (${r.kb} KB so far)` : `Scoring every section${r.mins ? ' (' + r.mins + ' min so far)' : ''}` };
+    w.chief = r.json || {};
+    if (ctx.persist) ctx.persist();
+  }
+  const ch = w.chief;
+  const find = (path, id) => (((c.pages || []).find((p) => p.path === path) || {}).sections || []).find((x) => x.id === id);
+  const seen = new Set();
+  const rewrites = (ch.rewrites || []).filter((r) => r && r.section && r.section.id && find(r.path, r.section.id) && !seen.has(r.path + '#' + r.section.id) && seen.add(r.path + '#' + r.section.id));
+  const heads = [...new Set((ch.headlines || []).map(cleanHead).filter(Boolean))].slice(0, 7);
+  const hero0 = heroOf(c);
+  if (!w.chief_judge && (rewrites.length || heads.length)) {
+    const pm = proofMode(f.quiz || {});
+    const user = `FACTS: ${JSON.stringify({ business: (f.quiz || {}).brand, offer: f.offer, real_proof: pm === 'none' ? 'none' : (f.quiz || {}).proof || 'none' }).slice(0, 6000)}\nTHE BUYER: ${JSON.stringify(((f.research || {}).audience) || {}).slice(0, 2500)}\n\nHERO HEADLINE NOW: ${hero0 ? hero0.headline : ''}\nHEADLINE CANDIDATES:\n${heads.map((h, i) => `${i + 1}. ${h}`).join('\n') || 'none'}\n\nREWRITTEN SECTIONS:\n${rewrites.map((r) => `KEY ${r.path}#${r.section.id}\nBEFORE: ${JSON.stringify(find(r.path, r.section.id))}\nAFTER: ${JSON.stringify(r.section)}`).join('\n\n').slice(0, 50000) || 'none'}\n\nPick the hero headline that sells best to this buyer: its number, or 0 to keep the current one. For every KEY, say whether to keep "after" or "before". Return only JSON: {"headline":{"pick":0,"why":""},"sections":[{"key":"index#hero","keep":"after","why":""}]}`;
+    let r;
+    try { r = await genJSON(ctx, 'chief-judge', PACKS.JUDGE + ' ' + HOUSE, user, { max: 3000, model: AI.backup(BUILDER), think: 'medium', schema: SCHEMA.judge, bg: true }); }
+    catch (e) { if (e.code === 503) throw e; r = { json: { failed: clip(e.message, 140) } }; }
+    if (r.pending) return { pending: true, note: 'Comparing each rewrite with the first draft' };
+    w.chief_judge = r.json || {};
+  }
+  const J = w.chief_judge || {};
+  const keepOf = new Map((J.sections || []).filter((x) => x && x.key).map((x) => [x.key, x.keep === 'before' ? 'before' : 'after']));
+  const copy = JSON.parse(JSON.stringify(c)); const rewritten = [];
+  for (const r of rewrites) {
+    const key = `${r.path}#${r.section.id}`; const keep = keepOf.get(key) || 'after';
+    const pg = copy.pages.find((p) => p.path === r.path); const i = pg.sections.findIndex((x) => x.id === r.section.id);
+    if (keep === 'after') pg.sections[i] = { ...pg.sections[i], ...cleanSection(r.section), id: pg.sections[i].id, p: pg.sections[i].p };
+    rewritten.push({ path: r.path, id: r.section.id, kept: keep, why: clip(r.why, 200) });
+  }
+  const pick = Math.round(Number((J.headline || {}).pick) || 0);
+  const hero = heroOf(copy); let picked = null;
+  if (hero && pick >= 1 && pick <= heads.length) { hero.headline = heads[pick - 1]; picked = heads[pick - 1]; }
+  const scores = (ch.scores || []).filter((x) => x && x.id).map((x) => ({ path: String(x.path || 'index'), id: String(x.id), score: Math.max(1, Math.min(10, Math.round(Number(x.score) || 1))), why: clip(x.why, 160) }));
+  const avg = scores.length ? Math.round(scores.reduce((a, x) => a + x.score, 0) / scores.length * 10) / 10 : null;
+  copy.review = { at: now(), scores, avg, headlines: heads, picked, why: clip((J.headline || {}).why, 240), rewritten, summary: clip(ch.summary, 400), judged: !J.failed };
+  delete w.chief; delete w.chief_judge;
+  const kept = rewritten.filter((x) => x.kept === 'after').length;
+  return { patch: { copy }, note: `${scores.length} sections scored${avg ? ', average ' + avg + ' of 10' : ''}. ${kept} of ${rewritten.length} rewrites kept${picked ? ', new headline picked from ' + heads.length : heads.length ? ', the first headline stayed' : ''}` };
 }
 
 async function stepWireframe(ctx) {
@@ -555,23 +720,25 @@ async function stepBuild(ctx) {
   const notes = [];
   await Promise.all(jobs.map(async (j) => {
     const key = `build-${j.opt}-${j.kind}`;
-    let user;
-    if (j.kind === 'index') {
-      const ref = refOf(f, j.opt); const fresh = !(ctx.work.drafts || {})[key];
-      const full = j.opt === 1 ? (t || (ref && tplById(ref.id))) : null;
-      const tref = !fresh ? '' : full ? await tplRef(full, j.pages[0].path) : LIBR.brief(ref, j.pages[0].path, j.opt);
-      user = `${pageBrief(f, j.opt, j.pages[0])}\n\n${tref}\n\nBuild this page now.`;
-    } else {
+    // The prompt is put together only when a new request starts. While a background job is still writing
+    // the page, nothing is fetched again.
+    const user = async (fresh) => {
+      if (j.kind === 'index') {
+        const ref = refOf(f, j.opt);
+        const full = j.opt === 1 ? (t || (ref && tplById(ref.id))) : null;
+        const tref = !fresh ? '' : full ? await tplRef(full, j.pages[0].path) : LIBR.brief(ref, j.pages[0].path, j.opt);
+        return `${pageBrief(f, j.opt, j.pages[0])}\n\n${tref}\n\nBuild this page now.`;
+      }
       const main = await rpc(ctx.jwt, 'gai_funnel_files_get', { p_id: f.id, p_opt: j.opt });
       const idx = (main.find((x) => x.path === 'index') || {}).content || '';
       const style = (idx.match(/<style[\s\S]*?<\/style>/i) || [''])[0].slice(0, 22000);
       const header = (idx.match(/<header[\s\S]*?<\/header>/i) || [''])[0].slice(0, 5000);
       const footer = (idx.match(/<footer[\s\S]*?<\/footer>/i) || [''])[0].slice(0, 4000);
-      const ref = refOf(f, j.opt); const refs = (ctx.work.drafts || {})[key] ? '' : j.pages.map((p) => LIBR.brief(ref, p.path, j.opt)).filter(Boolean).join('\n\n');
-      user = `${brief(f, true)}\n\n${j.pages.map((p) => pageSpec(f, j.opt, p)).join('\n\n')}\n\n${kitBrief(f)}\n\n${refs ? refs + '\n\n' : ''}THE MAIN PAGE IS BUILT. Reuse its exact design system, header and footer so every page feels like one funnel:\n${style}\n${header}\n${footer}\n\nBuild each of these pages now: ${j.pages.map((p) => p.path).join(', ')}. Output every page as a complete HTML file, one after the other. Put the line <!-- FILE: path --> right before each file's <!doctype html>.`;
-    }
-    const r = await gen(ctx, key, DESIGNER, user, { max: j.kind === 'index' ? 30000 : 26000, model: BUILDER });
-    if (r.pending) { notes.push(`option ${j.opt} ${j.kind === 'index' ? 'main page' : 'other pages'} ${r.kb ? r.kb + ' KB' : 'started'}`); return; }
+      const ref = refOf(f, j.opt); const refs = !fresh ? '' : j.pages.map((p) => LIBR.brief(ref, p.path, j.opt)).filter(Boolean).join('\n\n');
+      return `${brief(f, true)}\n\n${j.pages.map((p) => pageSpec(f, j.opt, p)).join('\n\n')}\n\n${kitBrief(f)}\n\n${refs ? refs + '\n\n' : ''}THE MAIN PAGE IS BUILT. Reuse its exact design system, header and footer so every page feels like one funnel:\n${style}\n${header}\n${footer}\n\nBuild each of these pages now: ${j.pages.map((p) => p.path).join(', ')}. Output every page as a complete HTML file, one after the other. Put the line <!-- FILE: path --> right before each file's <!doctype html>.`;
+    };
+    const r = await gen(ctx, key, DESIGNER, user, { max: j.kind === 'index' ? 30000 : 26000, model: BUILDER, bg: true });
+    if (r.pending) { notes.push(`option ${j.opt} ${j.kind === 'index' ? 'main page' : 'other pages'} ${r.kb ? r.kb + ' KB' : r.mins ? r.mins + ' min in' : 'started'}`); return; }
     if (j.kind === 'index') {
       await rpc(ctx.jwt, 'gai_funnel_file_put', { p_id: f.id, p_opt: j.opt, p_path: j.pages[0].path, p_content: tidy(r.text) });
       done[j.opt] = [...(done[j.opt] || []), j.pages[0].path];
@@ -607,6 +774,7 @@ async function filesFor(ctx, opts, final) {
   const f = ctx.f; const all = await rpc(ctx.jwt, 'gai_funnel_files_get', { p_id: f.id, p_opt: null });
   const used = new Set(); all.forEach((x) => (x.content.match(/\{\{asset:([a-z0-9._-]+)\}\}/gi) || []).forEach((m) => used.add(m.slice(8, -2))));
   ((f.visuals || {}).images || []).filter((x) => x.auto).forEach((x) => used.add(x.name));
+  used.delete(KIT_FILE);
   const assets = used.size ? await rpc(ctx.jwt, 'gai_assets_get', { p_names: [...used] }) : [];
   const out = [];
   const checkout = (f.quiz || {}).checkout_url || '';
@@ -768,81 +936,230 @@ async function screenshot(url, w, h) {
     return `data:${r.headers.get('content-type') || 'image/png'};base64,${buf.toString('base64')}`;
   } catch { return null; }
 }
+// What each kind of page has to make clear in its first lines, for the clarity check.
+function pageJob(path) {
+  const p = path.replace(/-\d+$/, '');
+  if (p === 'index') return 'what is offered, to whom, and what to do next';
+  if (p === 'order' || p === 'checkout') return 'what is being bought, the price, and how to finish the order';
+  if (p === 'upsell' || p === 'vip') return 'that the first step went through, what this one-time offer adds, the price, and how to accept or skip it';
+  if (p === 'thank-you') return 'that the step worked and exactly what to do next';
+  if (p === 'apply' || p === 'book') return 'who this is for and how to apply or book';
+  if (p === 'webinar' || p === 'replay' || p === 'vsl') return 'what they will watch or learn and the next step';
+  return 'what this page is for and what to do next';
+}
+const pageName = (f, path) => (pagesOf(f).find((p) => p.path === path) || {}).name || path;
+const plainText = (html) => String(html || '').replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>|<svg[\s\S]*?<\/svg>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+const REVIEWER = process.env.FOS_REVIEWER || 'openai/gpt-6.1-sol';
+let SHOTS = null; const shots = () => SHOTS || (SHOTS = require('./_shot'));
+
+// Layout facts read from the live page become checks in code, each with the fix the builder needs.
+function factChecks(facts, device) {
+  const out = []; if (!facts) return out; const on = device === 'phone' ? 'On the phone, ' : 'On desktop, ';
+  if (facts.overflow.length) out.push(`${on}the page scrolls sideways: ${facts.overflow.slice(0, 3).join('; ')}. Make these fit the screen width (max-width:100%, wrap or stack them).`);
+  if (facts.broken.length) out.push(`${on}${facts.broken.length} image${facts.broken.length > 1 ? 's do' : ' does'} not load: ${facts.broken.slice(0, 3).join(', ')}. Use an image from the IMAGES list.`);
+  if (facts.spill.length) out.push(`${on}text runs out of its box: ${facts.spill.slice(0, 3).join('; ')}. Let it wrap or reduce the size at this width.`);
+  if (facts.tiny > 8) out.push(`${on}${facts.tiny} pieces of text are smaller than 12px. Raise them to at least 13px.`);
+  if (device === 'phone' && facts.small > 3) out.push(`On the phone, ${facts.small} buttons or links are smaller than 32px to tap. Give them at least 44px of height.`);
+  if (facts.hidden > 0) out.push(`${on}${facts.hidden} block${facts.hidden > 1 ? 's stay' : ' stays'} invisible after scrolling. Use the motion kit's data-reveal so content always shows.`);
+  return out;
+}
+
+// The quality check reads every page of every option: checks in code, the Decisions API on the copy, then
+// full-page screenshots on desktop and phone that a second model reviews section by section. Each page's
+// result is saved as soon as it is done, so a long check carries on across function runs.
 async function stepQA(ctx) {
-  const f = ctx.f; const only = ctx.work.only; const opts = (f.options || []).map((o) => o.n).filter((n) => !only || only.includes(n));
+  const f = ctx.f; const w = ctx.work; const scope = w.recheck || w.only;
+  const opts = (f.options || []).map((o) => o.n).filter((n) => !scope || scope.includes(n));
   const files = await rpc(ctx.jwt, 'gai_funnel_files_get', { p_id: f.id, p_opt: null });
   const pm = proofMode(f.quiz || {});
   const facts = { business: (f.quiz || {}).brand, offer: (f.offer || {}), real_proof: pm === 'none' ? 'none' : (f.quiz || {}).proof || 'none', found_about_them: (f.research || {}).about || {} };
   if (pm === 'placeholder' || ((f.quiz || {}).intent || {}).later?.length) facts.requested_placeholders = 'The owner asked for bracketed fill-in placeholders (for example [Client name], [Client quote: ...], [Add your logo]) that they replace later. These are allowed and are not invented proof or leftovers.';
+  const order = pagesOf(f).map((p) => p.path);
+  const Q = w.qa = w.qa || {};
   const options = (f.options || []).slice();
-  const fixes = {};
-  await Promise.all(opts.map(async (n) => {
-    const mine = files.filter((x) => x.opt === n);
-    const checks = []; const pageIssues = {};
-    for (const x of mine) { const s = staticQA(f, x.content, x.path); if (s.issues.length) pageIssues[x.path] = s.issues; }
-    Object.entries(pageIssues).forEach(([p, is]) => is.forEach((i) => checks.push({ ok: false, label: `${p}: ${i}`, by: 'code' })));
-    if (!Object.keys(pageIssues).length) checks.push({ ok: true, label: 'Structure, links, images and house rules', by: 'code' });
-    const marks = mine.reduce((a, x) => a + (x.content.match(/data-fos-placeholder/g) || []).length, 0);
+  let waiting = 0;
+  try {
+    await Promise.all(opts.map(async (n) => {
+      const mine = files.filter((x) => x.opt === n).sort((a, b) => order.indexOf(a.path) - order.indexOf(b.path));
+      const o = options.find((x) => x.n === n) || {};
+      const C = Q[n] = Q[n] || {};
+      for (const x of mine) {
+        if (C[x.path] && C[x.path].done) continue;
+        if (Date.now() > ctx.deadline - 75000) { waiting++; return; }
+        const r = await qaPage(ctx, { f, n, o, x, facts, C });
+        if (r.pending) { waiting++; return; }
+        C[x.path] = { ...r, done: true };
+        if (ctx.persist) ctx.persist();
+      }
+    }));
+  } finally { if (SHOTS) await SHOTS.close(); }
+  if (waiting) return { pending: true, note: `Checking every page on desktop and phone (${Object.values(Q).reduce((a, c) => a + Object.values(c).filter((x) => x.done).length, 0)} pages done)` };
+  // Every page is checked: roll the results up per option.
+  const fixes = {}; let flagged = 0;
+  for (const n of opts) {
+    const C = Q[n] || {}; const checks = []; const need = {};
+    for (const path of order) {
+      const r = C[path]; if (!r) continue;
+      checks.push(...r.checks);
+      if (r.flag.length || r.code.length) { need[path] = { flag: r.flag, code: r.code }; flagged++; }
+    }
+    const marks = files.filter((x) => x.opt === n).reduce((a, x) => a + (x.content.match(/data-fos-placeholder/g) || []).length, 0);
     if (marks) checks.push({ ok: true, label: `${marks} marked placeholder${marks > 1 ? 's' : ''} to replace before launch, as you asked`, by: 'code' });
-    const main = (mine.find((x) => x.path === 'index') || mine[0] || {}).content || '';
-    const text = main.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>|<svg[\s\S]*?<\/svg>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 40000);
-    let ai = null;
+    if (Object.keys(need).length) fixes[n] = need;
+    const passed = checks.filter((c) => c.ok === true).length; const total = checks.filter((c) => c.ok !== null).length;
+    const i = options.findIndex((x) => x.n === n); if (i >= 0) options[i] = { ...options[i], qa: { checks, passed, total, round: roundsOf(w), at: now() } };
+  }
+  w.fixes = fixes; delete w.recheck;
+  for (const n of opts) delete Q[n];
+  const need = Object.keys(fixes).length; const rounds = roundsOf(w);
+  if (need && rounds < 2) return { patch: { options }, next: 'fix', note: `${flagged} page${flagged > 1 ? 's' : ''} in ${need} option${need > 1 ? 's' : ''} need${flagged > 1 ? '' : 's'} a fix pass${rounds ? ' (round 2)' : ''}` };
+  return { patch: { options }, next: 'done', note: need ? `Checked every page. ${flagged} page${flagged > 1 ? 's' : ''} still ${flagged > 1 ? 'have' : 'has'} notes after two fix rounds; they are listed in the quality check` : 'Checked every page on desktop and phone. All clear' };
+}
+const roundsOf = (w) => (w.fixed === true ? 2 : +w.fixed || 0);
+
+async function qaPage(ctx, { f, n, o, x, facts, C }) {
+  const path = x.path; const nm = path === 'index' ? '' : pageName(f, path) + ': ';
+  const R = C[path] = C[path] || {};
+  const checks = []; const flag = []; const code = [];
+  // 1. Checks in code.
+  const st = staticQA(f, x.content, path);
+  st.issues.forEach((i) => checks.push({ ok: false, label: nm + i, by: 'code' }));
+  if (!st.issues.length) checks.push({ ok: true, label: nm + 'Structure, links, images and house rules', by: 'code' });
+  code.push(...st.issues.filter((i) => !/meta description|exclamation/.test(i)));
+  if (st.issues.some((i) => /exclamation/.test(i))) flag.push('Remove every exclamation point from the copy.');
+  // 2. The Decisions API reads the copy.
+  if (!R.copy) {
+    const text = plainText(x.content).slice(0, 40000);
     try {
-      ai = await decide(ctx.K.ai, { facts, page_text: text }, {
+      const ai = await decide(ctx.K.ai, { facts, page: pageName(f, path), page_text: text }, {
         invented: { type: 'noul', instructions: 'Does page_text contain testimonials, client names, statistics, results, logos or awards that are not supported by facts? Bracketed fill-in placeholders the owner requested do not count.' },
         leftovers: { type: 'noul', instructions: facts.requested_placeholders ? 'Does page_text contain template leftovers from another business, lorem ipsum, or fill-in text other than the bracketed placeholders the owner requested?' : 'Does page_text contain placeholder text, template leftovers from another business, or bracketed fill-in text?' },
-        clarity: { type: 'score', instructions: 'How clear is it from the first lines of page_text what is offered, to whom, and what to do next?', criteria: ['Unclear', 'Somewhat clear', 'Clear', 'Very clear'] },
+        clarity: { type: 'score', instructions: `How clear is it from the first lines of page_text ${pageJob(path)}?`, criteria: ['Unclear', 'Somewhat clear', 'Clear', 'Very clear'] },
         tone: { type: 'noul', instructions: 'Does page_text use hype words, exclamation marks, or generic AI phrasing such as "unlock", "game-changer" or "it is not X, it is Y"?' },
       });
-    } catch (e) { checks.push({ ok: null, label: 'AI copy review skipped: ' + clip(e.message, 120), by: 'decisions' }); }
-    const A = (ai && ai.answers) || {};
-    const flag = [];
-    if (A.invented) { const bad1 = A.invented.noul > 0.6; checks.push({ ok: !bad1, label: bad1 ? 'Copy may include proof that was not given' : 'No invented proof found', p: A.invented.noul, by: 'decisions' }); if (bad1) flag.push('Remove any testimonial, client name, statistic, result or logo that is not in the facts.'); }
-    if (A.leftovers) { const b2 = A.leftovers.noul > 0.6; checks.push({ ok: !b2, label: b2 ? 'Template or placeholder text left in' : 'No template leftovers', p: A.leftovers.noul, by: 'decisions' }); if (b2) flag.push('Replace any placeholder or template leftover text with real copy for this business.'); }
-    if (A.clarity) { const c = A.clarity.score; checks.push({ ok: c >= 1.6, label: `First-screen clarity ${(c / 3 * 10).toFixed(1)} out of 10`, p: c, by: 'decisions' }); if (c < 1.3) flag.push('Make the hero say plainly what is offered, who it is for and what to do next.'); }
-    if (A.tone) { const b3 = A.tone.noul > 0.7; checks.push({ ok: !b3, label: b3 ? 'Some hype or generic phrasing' : 'Plain, specific tone', p: A.tone.noul, by: 'decisions' }); if (b3) flag.push('Rewrite hype or generic phrases in plain, specific language.'); }
-    // Screenshots of the live preview, desktop and phone, judged as images.
-    const o = options.find((x) => x.n === n) || {};
-    if (o.url) {
-      const [desk, phone] = await Promise.all([screenshot(o.url, 1280, 800), screenshot(o.url, 390, 844)]);
-      if (desk || phone) {
+      R.copy = ai.answers || {};
+    } catch (e) { R.copy = { skipped: clip(e.message, 120) }; }
+    if (ctx.persist) ctx.persist();
+  }
+  const A = R.copy;
+  if (A.skipped) checks.push({ ok: null, label: nm + 'AI copy review skipped: ' + A.skipped, by: 'decisions' });
+  if (A.invented) { const b = A.invented.noul > 0.6; checks.push({ ok: !b, label: nm + (b ? 'Copy may include proof that was not given' : 'No invented proof found'), p: A.invented.noul, by: 'decisions' }); if (b) flag.push('Remove any testimonial, client name, statistic, result or logo that is not in the facts.'); }
+  if (A.leftovers) { const b = A.leftovers.noul > 0.6; checks.push({ ok: !b, label: nm + (b ? 'Template or placeholder text left in' : 'No template leftovers'), p: A.leftovers.noul, by: 'decisions' }); if (b) flag.push('Replace any placeholder or template leftover text with real copy for this business.'); }
+  if (A.clarity) { const c = A.clarity.score; const ok = c >= 2; checks.push({ ok, label: nm + `First-screen clarity ${(c / 3 * 10).toFixed(1)} out of 10`, p: c, by: 'decisions' }); if (!ok) flag.push(`Make the first screen say plainly ${pageJob(path)}.`); }
+  if (A.tone) { const b = A.tone.noul > 0.7; checks.push({ ok: !b, label: nm + (b ? 'Some hype or generic phrasing' : 'Plain, specific tone'), p: A.tone.noul, by: 'decisions' }); if (b) flag.push('Rewrite hype or generic phrases in plain, specific language.'); }
+  // 3. Full-page screenshots on desktop and phone, reviewed by a second model.
+  if (o.url && !R.look) {
+    const url = o.url.replace(/\/$/, '') + (path === 'index' ? '/' : '/' + path);
+    let got = null;
+    const take = async () => {
+      if (got) return got;
+      if (ctx.deadline - Date.now() < 60000) return (got = { late: true });
+      const s = await shots().shoot([url], { deadline: Math.min(ctx.deadline - 30000, Date.now() + 120000) });
+      const pg = (s.pages || [])[0] || null;
+      const has = pg && ((((pg.desktop || {}).tiles) || []).length || (((pg.phone || {}).tiles) || []).length);
+      got = has ? { pg } : { pg: null, error: s.error || (pg && ((pg.desktop || {}).error || (pg.phone || {}).error)) || 'the page did not open' };
+      return got;
+    };
+    if (!R.facts) {
+      const t = await take();
+      if (t.late) return { pending: true };
+      if (!t.pg) {
+        // No browser here: fall back to the first screen from the screenshot service.
+        const [desk, phone] = await Promise.all([screenshot(url, 1280, 800), screenshot(url, 390, 844)]);
+        got = { pg: { desktop: { tiles: desk ? [{ device: 'desktop', y: 0, h: 800, sections: [], ...dataOf(desk) }] : [], facts: null }, phone: { tiles: phone ? [{ device: 'phone', y: 0, h: 844, sections: [], ...dataOf(phone) }] : [], facts: null } } };
+        R.facts = { fallback: true, why: clip(t.error, 120), tiles: (desk ? 1 : 0) + (phone ? 1 : 0) };
+      } else {
+        R.facts = { desktop: t.pg.desktop.facts, phone: t.pg.phone.facts, tiles: (t.pg.desktop.tiles || []).length + (t.pg.phone.tiles || []).length };
+      }
+      if (ctx.persist) ctx.persist();
+    }
+    // The first screen on both devices also goes to the Decisions API for a quick broken-or-not reading.
+    if (!R.first) {
+      const t = await take(); if (t.late) return { pending: true };
+      const d0 = ((t.pg || {}).desktop || {}).tiles?.[0]; const p0 = ((t.pg || {}).phone || {}).tiles?.[0];
+      if (d0 || p0) {
         try {
-          const shots = [desk && 'Desktop first screen:', desk && { type: 'image_url', image_url: { url: desk } }, phone && 'Phone first screen:', phone && { type: 'image_url', image_url: { url: phone } }].filter(Boolean);
-          const v = await decide(ctx.K.ai, shots, {
+          const img = (tl) => ({ type: 'image_url', image_url: { url: `data:${tl.media_type};base64,${tl.data}` } });
+          const v = await decide(ctx.K.ai, [d0 && 'Desktop, top of the page:', d0 && img(d0), p0 && 'Phone, top of the page:', p0 && img(p0)].filter(Boolean), {
             broken: { type: 'noul', instructions: 'Is anything visibly broken: overlapping or cut-off text, text running off screen, unreadable contrast, missing or broken images, or large empty areas?' },
             look: { type: 'score', instructions: 'How professional and premium does this page look?', criteria: ['Broken or amateur', 'Plain', 'Good', 'Premium'] },
           });
-          const B = v.answers || {};
-          if (B.broken) { const bb = B.broken.noul > 0.6; checks.push({ ok: !bb, label: bb ? 'Screenshot shows a layout problem' : 'Desktop and phone render cleanly', p: B.broken.noul, by: 'screenshot' }); if (bb) flag.push('The first screen has a visible layout problem on desktop or phone (overlap, cut-off text, contrast or empty areas). Fix the hero layout and responsive styles.'); }
-          if (B.look) checks.push({ ok: B.look.score >= 1.5, label: `Visual polish ${(B.look.score / 3 * 10).toFixed(1)} out of 10`, p: B.look.score, by: 'screenshot' });
-        } catch (e) { checks.push({ ok: null, label: 'Screenshot review skipped: ' + clip(e.message, 120), by: 'screenshot' }); }
-      } else checks.push({ ok: null, label: 'Screenshot review skipped: the screenshot service did not answer', by: 'screenshot' });
+          R.first = v.answers || {};
+        } catch (e) { R.first = { skipped: clip(e.message, 120) }; }
+      } else R.first = { skipped: 'no screenshot' };
+      if (ctx.persist) ctx.persist();
     }
-    const codeFix = Object.entries(pageIssues).filter(([, is]) => is.some((i) => !/meta description|exclamation/.test(i)));
-    if (flag.length || (codeFix.length && pageIssues.index)) fixes[n] = { flag, code: pageIssues.index || [] };
-    const passed = checks.filter((c) => c.ok === true).length; const total = checks.filter((c) => c.ok !== null).length;
-    const i = options.findIndex((x) => x.n === n); options[i] = { ...o, qa: { checks, passed, total, at: now() } };
-  }));
-  ctx.work.fixes = fixes;
-  const need = Object.keys(fixes).length;
-  return { patch: { options }, next: need && !ctx.work.fixed ? 'fix' : 'done', note: need && !ctx.work.fixed ? `${need} option${need > 1 ? 's need' : ' needs'} a fix pass` : 'All checks done' };
+    // The full review. It runs as a background job, so it is safe across function runs.
+    if (!R.facts.tiles) { R.look = { skipped: 'no screenshots could be taken of ' + url }; }
+    else {
+    const key = `look-${n}-${path}`;
+    if (!(ctx.work.bg || {})[key] && !got && ctx.deadline - Date.now() < 70000) return { pending: true };
+    const g = await genJSON(ctx, key, LOOK_SYS, async () => lookPrompt(f, path, R.facts, await take()), {
+      bg: true, think: 'medium', schema: SCHEMA.look, model: REVIEWER, max: 5000,
+      images: async () => { const t = await take(); return [...(((t.pg || {}).desktop || {}).tiles || []), ...(((t.pg || {}).phone || {}).tiles || [])].map((tl) => ({ media_type: tl.media_type, data: tl.data })); },
+    }).catch((e) => ({ error: e }));
+    if (g.pending) return { pending: true };
+    R.look = g.error ? { skipped: clip(g.error.message, 120) } : g.json || {};
+    }
+    if (ctx.persist) ctx.persist();
+  }
+  if (!o.url) checks.push({ ok: null, label: nm + 'Screenshot review skipped: connect Vercel so each option gets a live link', by: 'screenshot' });
+  if (R.facts) {
+    if (R.facts.fallback) checks.push({ ok: null, label: nm + 'Full-page screenshots skipped (' + clip(R.facts.why, 90) + '), so only the first screen was checked', by: 'screenshot' });
+    const fc = [...factChecks(R.facts.desktop, 'desktop'), ...factChecks(R.facts.phone, 'phone')];
+    fc.forEach((c) => checks.push({ ok: false, label: nm + c.replace(/\. [^.]*$/, ''), by: 'code' })); code.push(...fc);
+    if (!fc.length && !R.facts.fallback) checks.push({ ok: true, label: nm + 'No sideways scrolling, broken images or text out of its box on desktop or phone', by: 'code' });
+  }
+  const B = R.first || {};
+  if (B.skipped && o.url) checks.push({ ok: null, label: nm + 'First-screen review skipped: ' + B.skipped, by: 'screenshot' });
+  if (B.broken) { const bb = B.broken.noul > 0.6; checks.push({ ok: !bb, label: nm + (bb ? 'The first screen shows a layout problem' : 'The first screen renders cleanly on desktop and phone'), p: B.broken.noul, by: 'screenshot' }); if (bb) flag.push('The first screen has a visible layout problem on desktop or phone (overlap, cut-off text, contrast or empty areas). Fix the hero layout and responsive styles.'); }
+  const L = R.look || {};
+  if (L.skipped) checks.push({ ok: null, label: nm + 'Screenshot review skipped: ' + L.skipped, by: 'review' });
+  const probs = (L.problems || []).filter((p) => p && p.issue);
+  const serious = probs.filter((p) => p.severity !== 'low').slice(0, 8);
+  serious.forEach((p) => { checks.push({ ok: false, label: nm + `${p.device === 'both' ? '' : p.device === 'phone' ? 'Phone, ' : 'Desktop, '}${p.section ? p.section + ': ' : ''}${clip(p.issue, 160)}`, by: 'review' }); flag.push(`${p.device === 'both' ? 'Desktop and phone' : p.device === 'phone' ? 'Phone' : 'Desktop'}${p.section ? ', section ' + p.section : ''}: ${p.issue}. Fix: ${p.fix}`); });
+  const lookScore = B.look ? B.look.score : null; const ds = L.design ? +L.design.score : null;
+  if (lookScore !== null || ds !== null) {
+    const weak = (lookScore !== null && lookScore < 1.8) || (ds !== null && ds < 6);
+    checks.push({ ok: !weak, label: nm + `Visual polish ${ds !== null ? ds.toFixed(0) : (lookScore / 3 * 10).toFixed(1)} out of 10`, p: lookScore, by: 'screenshot' });
+    if (weak) flag.push(`Design pass: the page looks plain or unfinished.${L.design && L.design.weakest ? ' Weakest part: ' + L.design.weakest + '.' : ''}${L.design && L.design.direction ? ' Direction: ' + L.design.direction : ' Strengthen the hierarchy, spacing and real images section by section.'}`);
+  }
+  if (!serious.length && probs.length === 0 && L.problems) checks.push({ ok: true, label: nm + 'Every section reviewed on desktop and phone, no visible problems', by: 'review' });
+  return { checks, flag, code };
 }
+function dataOf(url) { const m = /^data:([^;]+);base64,(.*)$/.exec(url || ''); return m ? { media_type: m[1], data: m[2] } : {}; }
+const LOOK_SYS = 'You review funnel pages for a conversion design studio. Be exact and brief. ' + PACKS.LOOK;
+function lookPrompt(f, path, facts, t) {
+  const pg = (t && t.pg) || {};
+  const label = (tl, i, all) => `${tl.device === 'phone' ? 'Phone' : 'Desktop'} tile ${i + 1} of ${all.length}, ${tl.y} to ${tl.y + tl.h}px${tl.sections && tl.sections.length ? ', sections: ' + tl.sections.join(', ') : ''}`;
+  const dt = (pg.desktop || {}).tiles || []; const pt = (pg.phone || {}).tiles || [];
+  const fx = facts && !facts.fallback ? [...factChecks(facts.desktop, 'desktop'), ...factChecks(facts.phone, 'phone')] : [];
+  return `PAGE: ${path} (${pageName(f, path)}) of a ${(TYPES[f.funnel_type] || {}).name || 'funnel'} for ${(f.quiz || {}).brand || f.title}. Its job: make clear ${pageJob(path)}.
+THE IMAGES, IN ORDER:
+${[...dt.map((tl, i) => label(tl, i, dt)), ...pt.map((tl, i) => label(tl, i, pt))].map((x) => '- ' + x).join('\n') || '- none'}
+${fx.length ? 'MEASURED IN THE BROWSER (already known, include them only if you see more):\n' + fx.map((x) => '- ' + x).join('\n') + '\n' : ''}
+Review these screenshots. List up to 8 problems, worst first, each with the page path "${path}", the device, the section id or heading, severity (high: broken or blocks buying; medium: clearly hurts trust or clarity; low: polish), the issue and the exact fix. Then score the design from 1 to 10 against a premium studio build (6 is plain but fine), name the weakest section and give one direction for a design pass. Return only JSON.`;
+}
+
 async function stepFix(ctx) {
-  const f = ctx.f; const fixes = ctx.work.fixes || {};
-  const jobs = Object.entries(fixes);
+  const f = ctx.f; const w = ctx.work; const fixes = w.fixes || {}; const round = roundsOf(w) + 1;
   const files = await rpc(ctx.jwt, 'gai_funnel_files_get', { p_id: f.id, p_opt: null });
-  const pend = [];
-  await Promise.all(jobs.map(async ([n, fx]) => {
-    const cur = (files.find((x) => x.opt === +n && x.path === 'index') || {}).content; if (!cur) { delete fixes[n]; return; }
-    const user = `${brief(f, true)}\nFACTS YOU MAY USE: ${JSON.stringify({ offer: f.offer, real_proof: proofMode(f.quiz || {}) === 'none' ? 'none' : (f.quiz || {}).proof || 'none' }).slice(0, 5000)}\nIMAGES: ${JSON.stringify(imgList(f))}\nPAGES: ${pagesOf(f).map((p) => `{{page:${p.path}}}`).join(', ')}\n\nTHE CURRENT PAGE:\n${cur.slice(0, 150000)}\n\nQUALITY CHECK FOUND:\n${[...fx.flag, ...fx.code].map((x) => '- ' + x).join('\n')}\n\nFix exactly these problems and keep everything else as it is. Return the full corrected HTML file.`;
-    const r = await gen(ctx, 'fix-' + n, DESIGNER, user, { max: 30000, model: BUILDER });
-    if (r.pending) { pend.push(n); return; }
-    try { await rpc(ctx.jwt, 'gai_funnel_file_put', { p_id: f.id, p_opt: +n, p_path: 'index', p_content: tidy(r.text) }); } catch { /* keep the page as it was */ }
-    delete fixes[n];
+  const jobs = []; for (const [n, pages] of Object.entries(fixes)) for (const [path, fx] of Object.entries(pages || {})) jobs.push({ n: +n, path, fx });
+  const pend = []; const done = new Set(w.fixed_opts || []);
+  await Promise.all(jobs.map(async ({ n, path, fx }) => {
+    const cur = (files.find((x) => x.opt === n && x.path === path) || {}).content; if (!cur) { delete fixes[n][path]; return; }
+    const user = `${brief(f, true)}\nFACTS YOU MAY USE: ${JSON.stringify({ offer: f.offer, real_proof: proofMode(f.quiz || {}) === 'none' ? 'none' : (f.quiz || {}).proof || 'none' }).slice(0, 5000)}\nIMAGES: ${JSON.stringify(imgList(f))}\nPAGES: ${pagesOf(f).map((p) => `{{page:${p.path}}}`).join(', ')}\n\n${KIT_DOC}\n\nTHE CURRENT PAGE (${path}, ${pageName(f, path)}):\n${cur.slice(0, 150000)}\n\nTHE QUALITY CHECK FOUND, ON THE LIVE PAGE AT DESKTOP AND PHONE SIZE:\n${[...fx.flag, ...fx.code].map((x) => '- ' + x).join('\n')}\n\nFix exactly these problems, section by section, and keep everything else as it is: the copy, the facts, the images and the design system. A design pass means improving hierarchy, spacing, contrast and image use in the named sections without changing the words. Return the full corrected HTML file.`;
+    const r = await gen(ctx, `fix-${n}-${path}-${round}`, DESIGNER, user, { max: 30000, model: BUILDER, bg: true });
+    if (r.pending) { pend.push(`option ${n} ${pageName(f, path)}${r.kb ? ' ' + r.kb + ' KB' : ''}`); return; }
+    try { await rpc(ctx.jwt, 'gai_funnel_file_put', { p_id: f.id, p_opt: n, p_path: path, p_content: tidy(r.text) }); done.add(n); } catch { /* keep the page as it was */ }
+    delete fixes[n][path];
   }));
-  if (pend.length) return { pending: true, note: 'Fixing option ' + pend.join(' and ') };
-  ctx.work.fixed = true; ctx.work.after_preview = 'done';
-  return { next: 'preview', note: `Fixed ${jobs.length} option${jobs.length > 1 ? 's' : ''}. Publishing the fixed previews.` };
+  for (const n of Object.keys(fixes)) if (!Object.keys(fixes[n] || {}).length) delete fixes[n];
+  w.fixed_opts = [...done];
+  if (pend.length) return { pending: true, note: 'Fixing ' + pend.join(', ') };
+  w.fixed = round; w.after_preview = 'qa'; w.recheck = w.fixed_opts.length ? w.fixed_opts : null; delete w.fixed_opts;
+  if (!w.recheck) { delete w.recheck; w.after_preview = 'done'; }
+  return { next: 'preview', note: `Fixed ${jobs.length} page${jobs.length > 1 ? 's' : ''} (round ${round}). Publishing the fixed previews, then checking them again.` };
 }
 
 /* ---------- changes after review ---------- */
@@ -852,8 +1169,8 @@ async function stepRevise(ctx) {
   const files = await rpc(ctx.jwt, 'gai_funnel_files_get', { p_id: f.id, p_opt: r.opt });
   const cur = (files.find((x) => x.path === r.page) || {}).content;
   const user = `${brief(f, true)}\nBRAND KIT: ${JSON.stringify(f.brand || {}).slice(0, 2500)}\nIMAGES: ${JSON.stringify(imgList(f))}\nPAGES: ${pagesOf(f).map((p) => `${p.name} = {{page:${p.path}}}`).join(', ')}\n\n${KIT_DOC}\n\n${cur ? `THE CURRENT PAGE (${r.page}):\n${cur.slice(0, 150000)}` : `This page (${r.page}) does not exist yet. Build it in the same design system as the rest of the funnel.`}\n\nTHE OWNER'S CHANGE REQUEST:\n${r.request}\n\nApply the request with care and keep everything else as it is. Return the full updated HTML file.`;
-  const g = await gen(ctx, 'revise-' + r.id, DESIGNER, user, { max: 30000, model: BUILDER });
-  if (g.pending) return { pending: true, note: `Making the change to option ${r.opt} (${g.kb || 0} KB so far)` };
+  const g = await gen(ctx, 'revise-' + r.id, DESIGNER, user, { max: 30000, model: BUILDER, bg: true });
+  if (g.pending) return { pending: true, note: `Making the change to option ${r.opt}${g.kb ? ' (' + g.kb + ' KB so far)' : g.mins ? ' (' + g.mins + ' min in)' : ''}` };
   await rpc(ctx.jwt, 'gai_funnel_file_put', { p_id: f.id, p_opt: r.opt, p_path: r.page, p_content: tidy(g.text) });
   const i = revs.indexOf(r); revs[i] = { ...r, state: 'done', done_at: now() };
   const more = revs.some((x) => x.state === 'queued');
@@ -871,7 +1188,9 @@ async function stepPublish(ctx) {
     const d = await deployVercel(ctx.K.vercel, name, files.filter((x) => x.path !== 'README.md'), f.deploy);
     patch.deploy = { ...(f.deploy || {}), ...d, stage: 'live', option: n }; notes.push('Live on ' + d.url.replace('https://', ''));
   } else notes.push('Vercel is not connected yet, so there is no live link. Download the files instead.');
-  if (ctx.K.github) {
+  const studio = f.repo && f.repo.studio;
+  if (studio && studio.full_name) notes.push(studio.option && studio.option !== n ? `${studio.full_name} still has option ${studio.option}. Push option ${n} to it from this page` : 'Code is in ' + studio.full_name);
+  else if (ctx.K.github) {
     try {
       patch.repo = await pushGitHub(ctx.K.github, f, files, f.repo);
       notes.push('Code pushed to GitHub');
@@ -886,7 +1205,7 @@ async function stepPublish(ctx) {
   return { patch, next: 'live', note: notes.join('. ') };
 }
 
-const STEPS = { research: stepResearch, collect: stepCollect, offer: stepOffer, copy: stepCopy, wireframe: stepWireframe, brand: stepBrand, graphics: stepGraphics, build: stepBuild, preview: stepPreview, qa: stepQA, fix: stepFix, revise: stepRevise, publish: stepPublish };
+const STEPS = { research: stepResearch, collect: stepCollect, offer: stepOffer, copy: stepCopy, chief: stepChief, wireframe: stepWireframe, brand: stepBrand, graphics: stepGraphics, build: stepBuild, preview: stepPreview, qa: stepQA, fix: stepFix, revise: stepRevise, publish: stepPublish };
 function nextOf(step) { const i = ORDER.indexOf(step); return i >= 0 && i < ORDER.length - 1 ? ORDER[i + 1] === 'fix' ? 'done' : ORDER[i + 1] : 'done'; }
 
 // One run: claim the funnel, work through steps until time is nearly up, save after each one, release.
@@ -895,7 +1214,11 @@ async function run(jwt, id, budget = 270000) {
   const row = await rpc(jwt, 'gai_funnel_claim', { p_id: id, p_secs: Math.ceil(budget / 1000) + 25 });
   if (!row) return { busy: true };
   const ctx = { jwt, f: row, work: row.work || {}, deadline: t0 + budget };
-  const save = (patch, release) => rpc(jwt, 'gai_funnel_save', { p_id: id, p_patch: { ...patch, work: ctx.work }, p_release: !!release });
+  // Saves go out one at a time, so a quick save of the work in progress (a background job id, a finished
+  // page of the quality check) never lands after a newer one.
+  let chain = Promise.resolve();
+  const save = (patch, release) => { const p = chain.then(() => rpc(jwt, 'gai_funnel_save', { p_id: id, p_patch: { ...patch, work: ctx.work }, p_release: !!release })); chain = p.catch(() => {}); return p; };
+  ctx.persist = () => { save({}).catch(() => {}); };
   const log = (step, state, note) => {
     const s = (ctx.f.steps || []).filter((x) => x.id !== step);
     s.push({ id: step, label: LABEL[step] || step, state, note: clip(note, 400) || '', at: now() });
@@ -950,4 +1273,4 @@ function zip(files) {
   return Buffer.concat([...parts, cd, e]);
 }
 
-module.exports = { startOf, dirsFor, refOf, MAX_OPTS, launchCheck, launchMeta, siteFacts, stepCollect, proofMode, guessIntent, fontFaces, TYPES, P17, DIRECTIONS, DISPLAY, BODY, LABEL, ORDER, TPL, tplById, pagesOf, keys, run, gen, genJSON, parseJSON, brief, coaching, filesFor, resolve, staticQA, tidy, zip, readme, deployVercel, pushGitHub, jf, SYS, HOUSE, BUILDER, MOTION, slug };
+module.exports = { KIT_FILE, GH, ghH, siteUrl, esc, stepChief, stepQA, stepFix, pageJob, cleanHead, factChecks, startOf, dirsFor, refOf, MAX_OPTS, launchCheck, launchMeta, siteFacts, stepCollect, proofMode, guessIntent, fontFaces, TYPES, P17, DIRECTIONS, DISPLAY, BODY, LABEL, ORDER, TPL, tplById, pagesOf, keys, run, gen, genJSON, parseJSON, brief, coaching, filesFor, resolve, staticQA, tidy, zip, readme, deployVercel, pushGitHub, jf, SYS, HOUSE, BUILDER, MOTION, slug };

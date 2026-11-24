@@ -19,7 +19,11 @@ Funnel OS uses work by other people. Each part below keeps its own license, and 
 | [@vercel/functions](https://www.npmjs.com/package/@vercel/functions) | Finishing work after a reply on Vercel | Apache-2.0 |
 | [opentype.js](https://github.com/opentypejs/opentype.js) | Setting text in the brand fonts for funnel graphics | MIT |
 | [sharp](https://github.com/lovell/sharp) | Resizing and converting images | Apache-2.0. Its prebuilt libvips binaries are LGPL-3.0-or-later |
-| [node-html-parser](https://github.com/taoqf/node-html-parser) | `npm run templates` only | MIT |
+| [node-html-parser](https://github.com/taoqf/node-html-parser) | Reading built pages for the AI Studio push, and `npm run templates` | MIT |
+| [he](https://github.com/mathiasbynens/he) | Decoding HTML entities in built pages | MIT |
+| [@babel/parser](https://github.com/babel/babel/tree/main/packages/babel-parser) | Checking the route files written for AI Studio before they are pushed | MIT |
+| [puppeteer-core](https://github.com/puppeteer/puppeteer) | Driving the browser for the quality check's full-page screenshots | Apache-2.0 |
+| [@sparticuz/chromium](https://github.com/Sparticuz/chromium) | The Chromium build that runs inside the Vercel function | MIT. The Chromium it carries keeps Chromium's own licenses, BSD-3-Clause and others |
 | [pg](https://github.com/brianc/node-postgres) | Tests only | MIT |
 | [Playwright](https://github.com/microsoft/playwright) | Tests only | Apache-2.0 |
 
@@ -32,8 +36,8 @@ Funnel OS calls these services with the accounts and keys you add. Each one has 
 - [Perplexity API](https://docs.perplexity.ai): every model call, web search and decision step
 - [Supabase](https://supabase.com): the database and sign-in
 - [Vercel](https://vercel.com): hosting the app and the live funnel previews
-- [GitHub](https://github.com): repositories for approved funnels
+- [GitHub](https://github.com): repositories for approved funnels, and pushes to the repository of a member's HighLevel AI Studio project
 - [OpenRouter](https://openrouter.ai): AI images
-- [Microlink](https://microlink.io): screenshots of live previews for the quality check, and of pages a member links. It needs no account. When it is busy or over its free limit, the visual check is skipped.
+- [Microlink](https://microlink.io): screenshots of pages a member links, and a first-screen screenshot for the quality check when the full-page screenshots cannot run. It needs no account. When it is busy or over its free limit, that visual check is skipped.
 - [WhatsApp Cloud API](https://developers.facebook.com/docs/whatsapp/cloud-api): the WhatsApp line
 - [ElevenLabs](https://elevenlabs.io): voice notes in a custom voice

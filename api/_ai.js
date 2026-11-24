@@ -39,15 +39,26 @@ function pagesOf(resp, into) {
   }
 }
 
+// Extra request fields: how hard the model thinks first, and a JSON schema the answer has to match.
+// Thinking uses output tokens, so the allowance grows with it.
+const THINK = { minimal: 1000, low: 4000, medium: 10000, high: 24000, xhigh: 32000 };
+const room = (max, reasoning) => max + 4000 + (THINK[reasoning] || 0);
+function extras({ reasoning, format } = {}) {
+  const o = {};
+  if (reasoning) o.reasoning = { effort: reasoning };
+  if (format && format.schema) o.response_format = { type: 'json_schema', json_schema: { name: format.name, schema: format.schema } };
+  return o;
+}
+
 // Streams the answer token by token. onText gets each new piece of text.
-async function stream(key, model, system, msgs, onText, { max = 2600, web = true, signal, tools, steps } = {}) {
+async function stream(key, model, system, msgs, onText, { max = 2600, web = true, signal, tools, steps, reasoning, format } = {}) {
   let r;
   try {
     r = await fetch(BASE() + '/v1/agent', { method: 'POST', signal,
       headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify({ model, instructions: system, input: input(msgs), stream: true, max_output_tokens: max + 4000, ...(tools ? { tools } : web ? { tools: [WEB] } : {}), ...(steps ? { max_steps: steps } : {}) }) });
+      body: JSON.stringify({ model, instructions: system, input: input(msgs), stream: true, max_output_tokens: room(max, reasoning), ...(tools ? { tools } : web ? { tools: [WEB] } : {}), ...(steps ? { max_steps: steps } : {}), ...extras({ reasoning, format }) }) });
   } catch (x) { if (signal && signal.aborted) throw x; const e = bad(COACH.ai + ' could not reach the AI service. Check your connection and ask again.', 504); e.retryable = true; throw e; }
-  if (!r.ok || !r.body) { const t = await r.text().catch(() => ''); const e = apiError(r.status, t); e.retryable = r.status >= 500 || r.status === 429 || r.status === 404 || r.status === 400; e.raw = t.slice(0, 300); throw e; }
+  if (!r.ok || !r.body) { const t = await r.text().catch(() => ''); const e = apiError(r.status, t); e.status = r.status; e.retryable = r.status >= 500 || r.status === 429 || r.status === 404 || r.status === 400; e.raw = t.slice(0, 300); throw e; }
   const dec = new TextDecoder(); let buf = ''; let full = ''; let stop = null; const pages = new Map();
   const handle = (ev) => {
     if (ev.type === 'response.output_text.delta' && typeof ev.delta === 'string') { full += ev.delta; onText(ev.delta); }
@@ -76,6 +87,39 @@ async function stream(key, model, system, msgs, onText, { max = 2600, web = true
   return { text: full, stop, model, by: nameOf(model), pages: [...pages.values()] };
 }
 
+// Background jobs: Perplexity keeps writing on its side while each function run checks in, so a long page
+// is written in one piece however many runs it takes. start() returns { id, status } and, when the job
+// already finished, its text. poll() returns { status, text, stop, pages, error }.
+async function call(key, path, method, body, ms = 45000) {
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
+  let r;
+  try { r = await fetch(BASE() + path, { method, signal: ctl.signal, headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }); }
+  catch { clearTimeout(t); const e = bad('Funnel OS could not reach the AI service. It tries again on the next run.', 504); e.retryable = true; e.status = 0; throw e; }
+  clearTimeout(t);
+  const txt = await r.text().catch(() => '');
+  if (!r.ok) { const e = apiError(r.status, txt); e.status = r.status; e.retryable = r.status >= 500 || r.status === 429; e.raw = txt.slice(0, 300); throw e; }
+  try { return JSON.parse(txt); } catch { const e = bad('The AI service sent an answer that could not be read. It tries again on the next run.', 502); e.retryable = true; e.status = 0; throw e; }
+}
+function jobOf(j) {
+  const why = j.incomplete_details && j.incomplete_details.reason;
+  const pages = new Map(); pagesOf(j, pages);
+  const out = { id: j.id, status: j.status || 'queued', text: textOf(j), stop: j.status === 'incomplete' || /max_output_tokens|max_tokens/.test(why || '') ? 'max_tokens' : null, pages: [...pages.values()] };
+  if (j.status === 'failed') {
+    // Key and credit problems keep their own message and link. Anything else is left to the caller.
+    const info = JSON.stringify(j.error || {}).slice(0, 600); out.reason = info;
+    if (/auth|api key|unauthor|forbidden/i.test(info)) out.error = apiError(401, info);
+    else if (/credit|billing|balance|insufficient|quota/i.test(info)) out.error = apiError(402, info);
+  }
+  return out;
+}
+async function start(key, model, system, msgs, { max = 2600, tools, steps, reasoning, format } = {}) {
+  const j = await call(key, '/v1/agent', 'POST', { model, instructions: system, input: input(msgs), stream: false, background: true, max_output_tokens: room(max, reasoning), ...(tools ? { tools } : {}), ...(steps ? { max_steps: steps } : {}), ...extras({ reasoning, format }) });
+  if (!j || !j.id) { const e = bad('The AI service did not start the job.', 502); e.status = 422; throw e; }
+  return jobOf(j);
+}
+async function poll(key, id) { return jobOf(await call(key, '/v1/agent/' + encodeURIComponent(id), 'GET', null, 30000)); }
+async function cancel(key, id) { try { await call(key, '/v1/agent/' + encodeURIComponent(id) + '/cancel', 'POST', {}, 8000); return true; } catch { return false; } }
+
 // One short answer without streaming, used for voice.
 async function quick(key, system, msgs, max = 700) {
   let out = '';
@@ -93,4 +137,4 @@ async function check(key) {
   if (r.status === 402) throw bad('This Perplexity key works, but the account has no credit. Add credit in your Perplexity API billing, then save the key again.', 400, { label: 'Open Perplexity billing', href: 'https://console.perplexity.ai/project/billing' });
 }
 
-module.exports = { MODELS, DEFAULT, valid, nameOf, backup, stream, quick, check };
+module.exports = { MODELS, DEFAULT, valid, nameOf, backup, stream, quick, check, start, poll, cancel };

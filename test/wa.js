@@ -1,5 +1,5 @@
 // WhatsApp end to end against the local test server: admin setup, webhook checks, linking, text, voice notes and safety.
-const U = 'http://127.0.0.1:5055';
+const U = 'http://127.0.0.1:' + (process.env.PORT || 5055);
 const A = '00000000-0000-0000-0000-00000000000a'; const B = '00000000-0000-0000-0000-00000000000b';
 const SECRET = '0123456789abcdef0123456789abcdef';
 let pass = 0; let fail = 0;

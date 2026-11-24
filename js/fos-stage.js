@@ -12,9 +12,9 @@
   const reduce = () => !!(mq && mq.matches);
   const STEPS = ['research', 'offer', 'copy', 'wireframe', 'brand', 'graphics', 'build', 'preview', 'qa', 'done'];
   const LAST = STEPS.length - 1;
-  const LABEL = { research: 'Market research', offer: 'Offer', copy: 'Copy', wireframe: 'Wireframe', brand: 'Branding', graphics: 'Graphics', build: 'Building pages', preview: 'Live previews', qa: 'Quality check', done: 'Ready for review', fix: 'Fixes', revise: 'Making your changes', publish: 'Publishing' };
+  const LABEL = { research: 'Market research', offer: 'Offer', copy: 'Copy', chief: 'Copy review', wireframe: 'Wireframe', brand: 'Branding', graphics: 'Graphics', build: 'Building pages', preview: 'Live previews', qa: 'Quality check', done: 'Ready for review', fix: 'Fixes', revise: 'Making your changes', publish: 'Publishing' };
   const SHORT = { research: 'Research', offer: 'Offer', copy: 'Copy', wireframe: 'Wireframe', brand: 'Branding', graphics: 'Graphics', build: 'Build', preview: 'Preview', qa: 'Checks', done: 'Review' };
-  const WORK = { research: 'Reading competitors and buyer language', offer: 'Sharpening the promise, stack and price', copy: 'Writing every section', wireframe: 'Planning the layout of each section', brand: 'Choosing fonts and colors', graphics: 'Placing your images and drawing the rest', build: 'Coding each page', preview: 'Putting the previews online', qa: 'Checking links, layout and copy', done: 'Pick an option, ask for changes, or approve it', fix: 'Fixing what the check found', revise: 'Applying your change request', publish: 'Publishing your final funnel' };
+  const WORK = { research: 'Reading competitors and buyer language', offer: 'Sharpening the promise, stack and price', copy: 'Writing every section', chief: 'Scoring every section and rewriting the weak ones', wireframe: 'Planning the layout of each section', brand: 'Choosing fonts and colors', graphics: 'Placing your images and drawing the rest', build: 'Coding each page', preview: 'Putting the previews online', qa: 'Checking every page on desktop and phone', done: 'Pick an option, ask for changes, or approve it', fix: 'Fixing what the check found', revise: 'Applying your change request', publish: 'Publishing your final funnel' };
   // seconds per step in the demo: [working, result on screen]
   const DUR = { research: [1.5, 1.3], offer: [1.0, 1.3], copy: [1.5, 1.0], wireframe: [1.0, 1.5], brand: [1.0, 1.6], graphics: [1.0, 1.4], build: [2.6, 1.0], preview: [1.0, 1.4], qa: [1.5, 1.5], done: [0, 4.5] };
   // which quiz answers feed the core at each step
@@ -178,7 +178,7 @@
   }
   function setLive(f, fresh) {
     const done = f.status === 'review' || f.status === 'live';
-    const k = done ? 'done' : ({ fix: 'qa', revise: 'build', publish: 'preview' }[f.step] || f.step);
+    const k = done ? 'done' : ({ fix: 'qa', chief: 'copy', revise: 'build', publish: 'preview' }[f.step] || f.step);
     const act = (f.steps || []).find((s) => s.id === f.step) || {};
     S.target = Math.max(0, STEPS.indexOf(k));
     S.live = { label: done ? LABEL.done : LABEL[f.step] || LABEL[k] || 'Working', note: done ? WORK.done : clip(act.note || '', 140) || WORK[f.step] || WORK[k] || '' };

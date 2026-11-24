@@ -123,7 +123,7 @@ Open your menu, then **Members and settings**.
 **Funnel OS** (all optional, each one switches on a step of the funnel builder)
 
 - **Vercel token**: live preview links for every funnel option. Create one at [Vercel tokens](https://vercel.com/account/settings/tokens). For a team account, add the Team ID from your team's **Settings**, **General**. Without it, previews show inside Funnel OS only.
-- **GitHub token**: approved funnels are pushed to a private repository and the member is invited. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) for all repositories with **Administration** and **Contents** set to read and write.
+- **GitHub token**: approved funnels are pushed to a private repository and the member is invited. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) for all repositories with **Administration** and **Contents** set to read and write. It also covers your own pushes to HighLevel AI Studio, so you can leave the token field empty there.
 - **OpenRouter key**: AI images for the pages. Create one at [OpenRouter keys](https://openrouter.ai/settings/keys) and add credit. Without it, pages use CSS and SVG art.
 - **Who can build**: all approved members, or only you while you test.
 
@@ -132,6 +132,17 @@ Open your menu, then **Members and settings**.
 Members can text the coach or send voice notes to your WhatsApp Business number and get answers back, in text or in a voice you pick. The steps are in the app under **WhatsApp and your voice**: you create a Business app in Meta for Developers, add a phone number, make a permanent token with the `whatsapp_business_messaging` and `whatsapp_business_management` permissions and paste the Phone number ID, WhatsApp Business Account ID and App secret. The app shows you the callback URL and verify token to paste back into Meta.
 
 For replies in a custom voice, add an [ElevenLabs API key](https://elevenlabs.io/app/settings/api-keys) under **Your voice**.
+
+## Optional: send funnels to HighLevel AI Studio
+
+Members can keep editing a finished funnel in HighLevel AI Studio. Funnel OS pushes the approved option to the GitHub repository of an AI Studio project, and AI Studio pulls it in through Git Sync. [HighLevel's Git Sync guide](https://help.gohighlevel.com/support/solutions/articles/155000009214-how-to-use-git-sync-in-ai-studio) has the details. Nothing needs switching on in Funnel OS. Each member does this with their own accounts:
+
+1. In HighLevel, open **AI Studio** and create a new TanStack Start project for the funnel.
+2. In the project, open **More**, **Git**, **GitHub** and connect a GitHub account. AI Studio creates a private repository for the project, and **Automatic Pull** is on by default.
+3. Create a [fine-grained GitHub token](https://github.com/settings/personal-access-tokens/new). Under **Repository access**, choose **Only select repositories** and pick that repository, then set **Contents** to **Read and write**. [GitHub's token guide](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) explains each setting.
+4. In Funnel OS, at **Happy with option 1?**, paste the repository link and the token, then click **Approve**. The token is used once for that push and never saved.
+
+Funnel OS replaces the AI Studio home page and adds the other pages as routes. Each page keeps its own CSS in `public/funnel`, and `FUNNEL.md` in the repository lists the pages and anything still to connect. To send an update after the funnel is live, open **Send it to HighLevel AI Studio** on the funnel and push again. Funnel OS pushes to TanStack Start projects and empty repositories. A React (Vite) project gets a message that says to start a new project.
 
 ## Optional: a demo account
 
@@ -156,7 +167,8 @@ In Vercel, open your project, then **Settings**, **Domains**, and add a domain l
 - [ ] The sign-in page opens on your address without a "Finish the setup" message.
 - [ ] You signed up and see **Members and settings** in your menu.
 - [ ] The Perplexity key shows "added, ending" and its last 4 characters.
-- [ ] A question in any channel gets an answer from the coach.
+- [ ] A question in a new chat gets an answer from the coach.
+- [ ] **Brand** in the sidebar opens the brand kit, and a change there saves.
 - [ ] **New funnel** opens the quiz.
 - [ ] A second test account shows up under **Waiting for approval**, and you can approve it.
 
@@ -173,6 +185,8 @@ Every error in the app says what to do next and links to the place to do it. The
 | Your own account waits for approval | Another account signed up first. Run the `admin_email` update in [step 5](#step-5-create-your-admin-account). |
 | The coach does not answer | Check the Perplexity key and your credit in the [Perplexity console](https://console.perplexity.ai/project/billing), then save the key again in **Members and settings**. |
 | Funnel previews only show inside the app | Add a Vercel token under **Funnel OS** in **Members and settings**. |
+| A push to AI Studio is refused | The message names the fix. Most often the token is missing the repository or **Contents** read and write ([steps](#optional-send-funnels-to-highlevel-ai-studio)). |
+| The quality check says "Full-page screenshots skipped" | Check that `vercel.json` still lists the Chromium files under `api/funnel.js`, redeploy, then build again. Until then the check uses one Microlink screenshot of the first screen. |
 | The app stopped working after a quiet week | A free Supabase project pauses. Open it in the [Supabase dashboard](https://supabase.com/dashboard) and click **Resume project**. |
 | A saved key stopped working after you changed `GAI_ENC_KEY` | Add each key again in **Members and settings**. |
 

@@ -1,5 +1,6 @@
 // Browser smoke test against the local test server (node test/server.js). Covers the setup screen, the demo,
-// sign-up, the coach chat, the library, the admin page and the set password link, light and dark, desktop and phone.
+// the brand kit, sign-up, the coach chat, the library, the admin page and the set password link, light and dark,
+// desktop and phone.
 // Usage: node test/ui-smoke.js        Screenshots land in test/shots.
 const fs = require('fs');
 const path = require('path');
@@ -40,8 +41,10 @@ const overflow = (p) => p.evaluate(() => document.documentElement.scrollWidth > 
   await p.goto(U); await p.waitForSelector('[data-demo]'); await shot(p, 'signin');
   await p.click('[data-demo]'); await p.waitForSelector('.demo-note'); await p.waitForTimeout(500); await shot(p, 'demo');
   ok('demo user named', /Sam Rivera/.test(await p.locator('.side').innerText()));
-  await p.click('[data-ch=offers]'); await p.waitForTimeout(500);
+  ok('brand kit tabs in the sidebar', (await p.locator('#kitnav [data-kit]').count()) === 5, await p.locator('#kitnav').innerText());
   ok('demo pinned chat listed', /first low-ticket offer/.test(await p.locator('#threads').innerText()), await p.locator('#threads').innerText());
+  await p.click('#kitnav [data-kit=offers]'); await p.waitForSelector('.kit-head'); await p.waitForTimeout(400); await shot(p, 'brand-kit');
+  ok('brand kit opens on its tab', (await p.locator('#kitnav [data-kit=offers][aria-current=page]').count()) === 1 && /What you sell/.test(await p.locator('#main').innerText()), await p.locator('#main').innerText());
 
   // 3. Sign-up waits for approval.
   await p.click('[data-join]'); await p.waitForSelector('input[name=name]');

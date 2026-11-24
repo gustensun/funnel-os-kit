@@ -5,7 +5,7 @@
   const COACH = (CFG.coach && CFG.coach.ai) || 'AI Coach';
   const COACH_FIRST = (CFG.coach && CFG.coach.first) || '';
   const GUIDE = CFG.guide || 'https://github.com/gustensun/funnel-os-kit/blob/main/SETUP.md';
-  const { CHANNELS, byId } = window.GaiChannels;
+  const { byId } = window.GaiChannels;
   const esc = window.MD.esc;
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -65,6 +65,8 @@
     const [a, b] = h.split('/');
     if (a === 'admin') return { view: 'admin' };
     if (a === 'funnels') return { view: 'funnels', id: b || '' };
+    if (a === 'kit') return { view: 'kit', tab: b || 'brand' };
+    if (a === 'join') return { view: 'join' };
     if (a === 't' && b) return { view: 'thread', id: b };
     if (a === 'c' && b) return { view: 'channel', channel: byId(b).id };
     return { view: 'funnels', id: '' };
@@ -194,7 +196,7 @@
     const sm = location.hash.match(/^#set\/([a-f0-9]{20,80})$/); if (sm) return setScreen(sm[1]);
     if (location.hash === '#demo') { const t0 = await jwt(); if (!t0) { if ((await pubInfo()).demo) return demoIn(); history.replaceState(null, '', '/'); } }
     const t = await jwt();
-    if (!t) return authScreen(location.hash === '#signup' ? 'signup' : 'signin');
+    if (!t) return authScreen(location.hash === '#signup' || location.hash === '#/join' ? 'signup' : 'signin');
     try { S.me = await call('me'); }
     catch (e) { if (e.code === 401) return authScreen('signin', 'Your sign-in expired. Sign in again.', true); return gate(e.setup ? 'setup' : 'error', e); }
     if (S.me.status === 'pending') { clearTimeout(boot.poll); boot.poll = setTimeout(() => S.me && S.me.status === 'pending' && boot(), 60000); return gate('pending'); }
@@ -212,16 +214,18 @@
   function shell() {
     const name = (S.me.name || S.me.email || 'You').trim();
     app.innerHTML = `<div class="shell">
-      <aside class="side" aria-label="Channels and chats">
+      <aside class="side" aria-label="Menu">
         <div class="side-top"><a href="#/funnels" class="wordmark" style="text-decoration:none" aria-label="Funnel OS home"><span class="mk"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M13.2 2 4.5 13.4h6.1L9.8 22l8.7-11.4h-6.1z"/></svg></span>Funnel <span class="ai">OS</span></a><button class="icon-btn" data-theme-toggle aria-label="Switch light and dark">${ic(document.documentElement.dataset.theme === 'dark' ? 'sun' : 'moon')}</button></div>
         <div class="side-new"><a class="btn" href="#/funnels/new" data-newf>${ic('plus')}New funnel</a></div>
         <div class="side-scroll">
           <nav class="side-tools"><a class="nav-row" href="#/funnels" data-fos-nav><span class="glyph">${ic('funnel')}</span><span class="t">My funnels</span></a></nav>
+          <div class="side-label">Brand kit</div>
+          <p class="side-note">Funnel OS uses it in every build, so you never start over.</p>
+          <nav class="side-tools" id="kitnav" aria-label="Brand kit">${((window.FunnelOS && window.FunnelOS.tabs) || []).map(([k, l], i) => `<a class="nav-row" href="#/kit/${k}" data-kit="${k}"><span class="num">${String(i + 1).padStart(2, '0')}</span><span class="t">${esc(l)}</span></a>`).join('')}</nav>
           <div class="side-label side-bonus"><span>${esc(COACH)}</span><span class="bonus">Bonus</span></div>
           <p class="side-note">Ask ${esc(COACH)} when you need clarity on your offer, copy or next step.</p>
           <nav class="side-tools"><button class="nav-row" data-new><span class="glyph">${ic('plus')}</span><span class="t">New chat with ${esc(COACH)}</span></button></nav>
-          <nav id="chans">${CHANNELS.map((c, i) => `<a class="nav-row" href="#/c/${c.id}" data-ch="${c.id}">${c.id === 'general' ? `<span class="glyph">${ic('spark')}</span>` : `<span class="num">${String(i).padStart(2, '0')}</span>`}<span class="t">${esc(c.name)}</span></a>`).join('')}</nav>
-          <div class="side-label" id="recent-label">Recent</div>
+          <div class="side-label" id="recent-label">Recent chats</div>
           <div id="threads"></div>
         </div>
         <div class="side-foot">
@@ -232,16 +236,18 @@
       </aside>
       <main class="main" id="main"></main>
     </div>`;
-    $('[data-new]').onclick = () => { S.navOpen = false; $('.shell').classList.remove('nav-open'); newChat(); };
+    $('[data-new]').onclick = () => { S.navOpen = false; $('.shell').classList.remove('nav-open'); S.channel = 'general'; store.set('gai-channel', 'general'); newChat(); };
     $('[data-newf]').onclick = () => { S.navOpen = false; $('.shell').classList.remove('nav-open'); };
     const jn = $('[data-join]'); if (jn) jn.onclick = async () => { await auth.auth.signOut(); S.me = null; authScreen('signup'); };
     pendingCount();
     const an = $('[data-admin-nav]'); if (an) an.onclick = () => { S.navOpen = false; $('.shell').classList.remove('nav-open'); };
     $('[data-theme-toggle]').onclick = (e) => { const d = document.documentElement; d.dataset.theme = d.dataset.theme === 'dark' ? 'light' : 'dark'; store.set('gai-theme', d.dataset.theme); e.currentTarget.innerHTML = ic(d.dataset.theme === 'dark' ? 'sun' : 'moon'); };
     $('[data-me]').onclick = (e) => { e.stopPropagation(); toggleMenu(); };
-    $('#chans').onclick = () => { $('.shell').classList.remove('nav-open'); };
+    $('#kitnav').onclick = (e) => { if (e.target.closest('a')) { S.navOpen = false; $('.shell').classList.remove('nav-open'); } };
     const fnav = $('[data-fos-nav]'); if (fnav) fnav.onclick = () => { S.navOpen = false; $('.shell').classList.remove('nav-open'); };
     document.addEventListener('click', (e) => { if (S.menuOpen && !e.target.closest('.menu')) toggleMenu(false); if (S.navOpen && !e.target.closest('.side') && !e.target.closest('.menu-btn')) { S.navOpen = false; $('.shell') && $('.shell').classList.remove('nav-open'); } });
+    // Escape closes the phone menu and gives focus back to its button.
+    if (!S.escNav) { S.escNav = true; document.addEventListener('keydown', (e) => { if (e.key !== 'Escape' || !S.navOpen) return; S.navOpen = false; const sh = $('.shell'); if (sh) sh.classList.remove('nav-open'); const mb = $('[data-nav]'); if (mb) { mb.setAttribute('aria-expanded', 'false'); mb.focus(); } }); }
   }
   function toggleMenu(force) {
     S.menuOpen = force === undefined ? !S.menuOpen : force;
@@ -261,11 +267,11 @@
   }
   function markNav() {
     const r = route();
-    $$('#chans .nav-row').forEach((a) => a.classList.toggle('on', r.view !== 'admin' && a.dataset.ch === S.channel && !(S.thread && r.view === 'thread')));
+    $$('#kitnav .nav-row').forEach((a) => { const on = r.view === 'kit' && a.dataset.kit === r.tab; a.classList.toggle('on', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     $$('#threads .nav-row').forEach((a) => a.classList.toggle('on', S.thread && a.dataset.id === S.thread));
+    const nw = $('[data-new]'); if (nw) nw.classList.toggle('on', r.view === 'channel' && !S.thread);
     const an = $('[data-admin-nav]'); if (an) an.classList.toggle('on', r.view === 'admin');
     const fn = $('[data-fos-nav]'); if (fn) fn.classList.toggle('on', r.view === 'funnels');
-    if (r.view === 'funnels') $$('#chans .nav-row').forEach((a) => a.classList.remove('on'));
   }
   // What Funnel OS borrows from the shell.
   const fosHelpers = () => ({ api, esc, ic, topbar, bindTop, errBox, toast, shrink, b64, sheet, closeSheet, me: S.me, ask: askCoach, coach: COACH });
@@ -283,11 +289,9 @@
   }
   function renderThreads() {
     const box = $('#threads'); if (!box) return;
-    const ch = byId(S.channel);
-    const list = S.threads.filter((t) => (t.channel || 'general') === ch.id).slice(0, 40);
-    $('#recent-label').textContent = 'Recent in ' + ch.name;
+    const list = S.threads.slice(0, 40);
     box.innerHTML = list.length ? list.map((t) => `<div class="nav-row thread-row" data-id="${t.id}"><a class="t" href="#/t/${t.id}" style="text-decoration:none;color:inherit">${esc(t.title)}</a><button class="del" data-del="${t.id}" aria-label="Delete chat">${ic('trash')}</button></div>`).join('')
-      : '<div class="side-empty">No chats here yet.</div>';
+      : `<div class="side-empty">No chats yet. Ask ${esc(COACH_FIRST || 'the coach')} anything about your offer, copy or next step.</div>`;
     box.onclick = async (e) => {
       const d = e.target.closest('[data-del]');
       if (d) {
@@ -312,9 +316,11 @@
   function onRoute() {
     if (!S.me || S.me.status !== 'approved' || !$('#main')) return;
     const r = route();
-    if (window.FunnelOS && r.view !== 'funnels') window.FunnelOS.stop();
+    if (window.FunnelOS && r.view !== 'funnels' && r.view !== 'kit') window.FunnelOS.stop();
+    if (r.view === 'join') { if (S.me.demo) { auth.auth.signOut().then(() => { S.me = null; history.replaceState(null, '', '/'); authScreen('signup'); }); return; } return go('#/funnels'); }
     if (r.view === 'admin') { if (!S.me.admin) return go('#/c/' + S.channel); S.thread = null; markNav(); return adminView(); }
     if (r.view === 'funnels') { S.thread = null; markNav(); return window.FunnelOS.mount($('#main'), fosHelpers(), r.id); }
+    if (r.view === 'kit') { S.thread = null; markNav(); return window.FunnelOS.kit($('#main'), fosHelpers(), r.tab); }
     if (r.view === 'thread') return openThread(r.id);
     if (S.channel !== r.channel || S.thread || !S.turns.length) {
       if (S.busy) S.busy.abort(); // the answer still finishes and saves on the server
@@ -325,10 +331,10 @@
   function newChat() { if (S.busy) S.busy.abort(); S.busy = null; S.gen++; S.thread = null; S.turns = []; S.files = []; go('#/c/' + S.channel); chatView(); renderThreads(); }
 
   function topbar(title, sub, right = '') {
-    return `<header class="top"><button class="icon-btn menu-btn" data-nav aria-label="Open channels">${ic('menu')}</button><h1>${esc(title)}</h1><span class="sub">${esc(sub || '')}</span>${right}</header>`;
+    return `<header class="top"><button class="icon-btn menu-btn" data-nav aria-label="Open menu" aria-expanded="false">${ic('menu')}</button><h1>${esc(title)}</h1><span class="sub">${esc(sub || '')}</span>${right}</header>`;
   }
   function bindTop() {
-    const n = $('[data-nav]'); if (n) n.onclick = (e) => { e.stopPropagation(); S.navOpen = !S.navOpen; $('.shell').classList.toggle('nav-open', S.navOpen); };
+    const n = $('[data-nav]'); if (n) n.onclick = (e) => { e.stopPropagation(); S.navOpen = !S.navOpen; $('.shell').classList.toggle('nav-open', S.navOpen); n.setAttribute('aria-expanded', String(S.navOpen)); };
     const v = $('[data-voice]'); if (v) v.onclick = () => startVoice();
   }
 

@@ -4,7 +4,7 @@ Five minutes to understand what you're setting up and the order to do it in.
 
 ## What you're setting up
 
-Funnel OS is one web app with two parts. The funnel builder turns a short quiz into a ready-to-launch funnel with live previews. The AI coach answers questions about funnels, offers, copy, content and AI from a library of frameworks, in chat, by voice or on WhatsApp.
+Funnel OS is one web app with two parts. The funnel builder turns a saved brand kit and a short quiz into a ready-to-launch funnel with live previews, and can send the approved one to HighLevel AI Studio. The AI coach answers questions about funnels, offers, copy, content and AI from a library of frameworks, in chat, by voice or on WhatsApp.
 
 You run it on your own accounts, so you own the code, the members, the data and the keys.
 
@@ -16,7 +16,7 @@ No coding needed. You copy values between a few websites, and [SETUP.md](SETUP.m
 2. **Sign up first.** The first account on a new install becomes the admin, so sign up right after your first deploy.
 3. **Add your Perplexity key.** Open **Members and settings** at the bottom left. The coach and the funnel builder both run on it.
 4. **Ask the coach something real.** "Which funnel should I build first for my offer?" is a good first question.
-5. **Build a test funnel.** Click **New funnel** and answer the quiz for one of your own offers.
+5. **Save your brand kit, then build a test funnel.** Fill in the five brand kit tabs in the sidebar, then click **New funnel** and answer the quiz for one of your own offers. The quiz starts from the kit.
 6. **Add the optional keys you need.** A Vercel token for live preview links, a GitHub token to hand members their code, OpenRouter for AI images.
 7. **Make it yours.** Put your name on the coach and your frameworks in the library with [CUSTOMIZE.md](CUSTOMIZE.md).
 8. **Invite members.** Send them your address. New accounts wait for your approval on the admin page.
@@ -25,6 +25,7 @@ No coding needed. You copy values between a few websites, and [SETUP.md](SETUP.m
 
 - **Keep your copy private.** It holds your settings and your changes, and the license allows private copies only.
 - **You pay for the AI.** Members use your Perplexity key. Add credit in the Perplexity console and turn on auto reload so answers never stop.
+- **AI Studio is optional.** Members who want to keep editing a funnel in HighLevel AI Studio bring their own project and GitHub token. [SETUP.md](SETUP.md#optional-send-funnels-to-highlevel-ai-studio) has the steps.
 - **The demo is optional.** Visitors can try a demo account with one click. [SETUP.md](SETUP.md#optional-a-demo-account) shows how to add or remove it.
 
 ## If you get stuck
