@@ -270,7 +270,7 @@ function brief(f, short) {
     proofLine(q),
     laterLine(q),
     q.checkout_url ? `CHECKOUT OR BOOKING LINK: ${q.checkout_url}` : '',
-    (q.urls || []).length ? `THEIR LINKS: ${(q.urls || []).join(', ')}` : '',
+    (q.urls || []).length && !((f.visuals || {}).sites || []).length ? `THEIR LINKS: ${(q.urls || []).join(', ')}` : '',
     q.notes ? `NOTES FROM THEM:\n${String(q.notes).slice(0, short ? 2000 : 6000)}` : '',
     docs ? `THEIR DOCUMENTS:\n${docs}` : '',
     t ? `TEMPLATE THEY PICKED: ${t.name} (${t.label}, ${t.cat})` : '',
@@ -278,17 +278,24 @@ function brief(f, short) {
     f.research && f.research.about && !short ? `FACTS FOUND ABOUT THEM: ${JSON.stringify(f.research.about).slice(0, 3000)}` : '',
   ].filter(Boolean).join('\n\n');
 }
-// What their links really contain: names, categories and counts, read straight from the pages.
+// What their links really contain: names, categories and counts, read straight from the pages. Only links
+// that show this offer give names and counts; a site given for its look or with other offers on it stays out.
 function siteFacts(f, short) {
-  const sites = ((f.visuals || {}).sites || []).filter((x) => !x.failed && (x.gallery || x.title));
-  if (!sites.length) return '';
-  return 'WHAT THEIR LINKS CONTAIN (read from the pages, use these real names and counts):\n' + sites.map((x) => {
+  const all = ((f.visuals || {}).sites || []).filter((x) => !x.failed && (x.gallery || x.title));
+  if (!all.length) return '';
+  const sites = all.filter((x) => (x.use || 'product') === 'product');
+  const other = all.filter((x) => x.use === 'about' || x.use === 'look');
+  const rest = other.length ? 'THEIR OTHER LINKS:\n' + other.map((x) => (x.use === 'look'
+    ? `- ${x.url}: given for its look only (colors, fonts, style). Never use its words, products, offers or images.`
+    : `- ${x.url}: ${x.title || 'their site'}. Use it only for facts about them (who they are, credentials). Never mention, show or sell the other products, programs or offers on it.`)).join('\n') : '';
+  if (!sites.length) return rest;
+  return 'WHAT THEIR PRODUCT LINKS CONTAIN (read from the pages, use these real names and counts):\n' + sites.map((x) => {
     const cats = Object.entries(x.cats || {}).map(([k, n]) => `${k} ${n}`).join(', ');
     const labels = Object.entries(x.labels || {}).map(([k, n]) => `${k} ${n}`).join(', ');
     return [`- ${x.url}: ${x.title || ''}${x.h1 ? '. Headline: ' + x.h1 : ''}${x.desc ? '. ' + clip(x.desc, 240) : ''}`,
       x.gallery ? `  ${x.count} items shown on the page.${cats ? ' By category: ' + cats + '.' : ''}${labels ? ' By type: ' + labels + '.' : ''}` : '',
       x.gallery && (x.names || []).length ? `  Item names: ${(x.names || []).slice(0, short ? 30 : 90).map((n) => n.split(' | ')[0]).join('; ')}` : ''].filter(Boolean).join('\n');
-  }).join('\n');
+  }).join('\n') + (rest ? '\n\n' + rest : '');
 }
 // What the owner wants done about proof and missing pieces, read from their own words.
 const PLACEHOLDER_RULE = 'Build each testimonial or result card as a clearly marked fill-in: the quote as a bracketed instruction such as [Client quote: the result they got and how fast], the name as [Client name], the role as [Role, city], an initials circle instead of a photo, and data-fos-placeholder="testimonial" on the card. Never write a real-sounding name, quote, logo or number for these.';
@@ -349,33 +356,88 @@ async function stepResearch(ctx) {
   const f = ctx.f;
   if (!(f.quiz || {}).intent) { const it = await readIntent(ctx); if (it) { f.quiz = { ...(f.quiz || {}), intent: it }; ctx.work.intent_patch = true; } }
   const q = f.quiz || {};
-  const urls = (q.urls || []).slice(0, 5);
+  const look = COLLECT.lookLinks(q, COLLECT.linksOf(q));
+  const urls = (q.urls || []).filter((u) => !look.has(u)).slice(0, 5);
   const want = '{"summary":"3 sentences on the market and where this offer fits","audience":{"who":"","pains":["5 pains in their words"],"desires":["4"],"objections":["5 real buying objections"],"words":["8 phrases buyers actually use"]},"competitors":[{"name":"","offer":"","price":"","angle":"","url":""}],"price_range":"","angles":["5 angles that could lead the page, strongest first"],"gaps":["3 things competitors do not say that this business can"],"about":{"bio":"what their own pages say about them","credentials":[""],"proof":["testimonials or results found on their own pages, quoted exactly, with the name"],"numbers":["real numbers found on their pages"]},"sources":[{"title":"","url":""}]}';
-  const user = `${brief(f, true)}\n\nResearch this market with web search.${urls.length ? ` First read their own pages with fetch_url (${urls.join(', ')}) and collect facts about them: bio, credentials, real testimonials and numbers, exactly as written.` : ''} Then find 5 to 8 competing offers with price, angle and URL, the buyer's pains, desires and objections in their own words (reviews, forums, Reddit, YouTube comments), typical prices, and the angles working right now. Return only JSON in this shape: ${want}`;
+  const user = `${brief(f, true)}\n\nResearch this market with web search.${urls.length ? ` First read their own pages with fetch_url (${urls.join(', ')}) and collect facts about them: bio, credentials, real testimonials and numbers, exactly as written. Leave out their other products, programs and offers.` : ''}${look.size ? ` They gave ${[...look].join(', ')} for its look only: do not use it as a source.` : ''} Then find 5 to 8 competing offers with price, angle and URL, the buyer's pains, desires and objections in their own words (reviews, forums, Reddit, YouTube comments), typical prices, and the angles working right now. Return only JSON in this shape: ${want}`;
   const r = await genJSON(ctx, 'research', SYS + ' You research markets for funnels and cite real sources.', user, { max: 5000, tools: [{ type: 'web_search' }, { type: 'fetch_url' }], steps: 10, schema: SCHEMA.research });
   if (r.pending) return { pending: true, note: 'Still researching' };
   const j = r.json || {};
   const srcs = [...(r.pages || []), ...(Array.isArray(j.sources) ? j.sources : [])].filter((s) => s && /^https?:\/\//.test(s.url || ''));
   const seen = new Set(); j.sources = srcs.filter((s) => (seen.has(s.url) ? false : seen.add(s.url))).slice(0, 14).map((s) => ({ title: clip(s.title, 140) || s.url, url: s.url }));
   const qp = ctx.work.intent_patch ? { quiz: f.quiz } : {}; delete ctx.work.intent_patch;
+  j.read = urls;
   return { patch: { research: j, ...qp }, note: `${(j.competitors || []).length} competitors, ${(j.angles || []).length} angles, ${j.sources.length} sources` };
 }
 
-// Reads their links for real product images, names and counts. A gallery of templates or products
-// becomes real screenshots for the page and the graphics, so nothing is drawn as a stand-in.
+// Research can be kept on a new build unless it may have read a site they give only for its look: research
+// made before links were sorted (no list of the pages it read), or one that read a look site.
+function researchFresh(f) {
+  const r = f.research; if (!r) return false;
+  const q = f.quiz || {};
+  const key = (u) => { try { const x = new URL(u); return x.host.replace(/^www\./, '').toLowerCase() + x.pathname.replace(/\/+$/, ''); } catch { return ''; } };
+  const look = new Set([...COLLECT.lookLinks(q, COLLECT.linksOf(q)), ...COLLECT.lookDomains(q)].map(key).filter(Boolean));
+  if (!look.size) return true;
+  if (!Array.isArray(r.read)) return false;
+  return !r.read.some((u) => look.has(key(u)));
+}
+
+// What each link is for, from their words and what is on the page: "product" (it shows what this funnel
+// sells; only the cards that show it become images), "about" (facts about them) or "look" (colors, fonts and
+// style only). A link they point at for its look stays look, whatever is on it.
+async function linkUses(ctx, sites) {
+  const q = ctx.f.quiz || {};
+  const guess = COLLECT.guessUses(q, sites);
+  const open = sites.map((s, i) => ({ s, i })).filter(({ s, i }) => !s.failed && guess[i].use !== 'look');
+  if (!open.length) return guess;
+  const list = open.map(({ s }, k) => {
+    const cards = (s.items || []).slice(0, 60).map((x, j) => `${j + 1}. ${[x.name, x.label, x.cat_name || x.cat].filter(Boolean).join(' | ') || 'picture'}${x.alt && x.alt !== x.name ? ' (' + clip(x.alt, 60) + ')' : ''}`).join('; ');
+    return `LINK ${k + 1}: ${s.url}\n  Title: ${s.title || 'none'}${s.h1 ? '. Headline: ' + s.h1 : ''}${s.desc ? '. About: ' + clip(s.desc, 240) : ''}\n  ${s.gallery ? 'Cards' : 'Pictures'} on the page: ${cards || 'none'}`;
+  }).join('\n');
+  const user = `THE FUNNEL SELLS: ${[q.offer_name, q.price].filter(Boolean).join(', ') || 'see below'}\nWHAT THEY SELL, IN THEIR WORDS:\n${clip(q.offer, 1500)}\n${q.vibe ? 'THE LOOK THEY WANT: ' + clip(q.vibe, 300) + '\n' : ''}${q.notes ? 'THEIR NOTES:\n' + clip(q.notes, 1500) + '\n' : ''}\nSort these links. THEIR LINKS, AS READ FROM THE PAGES:\n${list}\n\nDecide what each link is for:\n- "product": the page shows the thing this funnel sells (its templates, screens, modules or product photos). Put in keep the numbers of the cards or pictures that show what a buyer of this offer gets. Leave out other products, programs, people, logos and decoration.\n- "about": their own site or profile with facts about them, but it does not show this offer.\n- "look": they point at it for its branding, colors, fonts or style, or it sells other things.\nWhen they say to use a link for its branding or look, it is "look", whatever is on it.\nReturn only JSON: {"links":[{"n":1,"use":"product|about|look","keep":[1,2],"why":"one short sentence"}]}`;
+  let r;
+  try { r = await genJSON(ctx, 'links', 'You sort the links a business owner gave a funnel builder. Reply with JSON only.', user, { max: 1500 }); }
+  catch { return guess; }
+  if (r.pending) return { pending: true };
+  const got = (r.json || {}).links; if (!Array.isArray(got)) return guess;
+  const out = guess.slice();
+  open.forEach(({ s, i }, k) => {
+    const a = got.find((x) => x && +x.n === k + 1); if (!a || !['product', 'about', 'look'].includes(a.use)) return;
+    const n = Math.min(60, (s.items || []).length);
+    let keep = Array.isArray(a.keep) ? [...new Set(a.keep.map(Number).filter((x) => x >= 1 && x <= n))] : null;
+    // Most of the listed cards kept means the whole gallery, including any cards past the first 60.
+    if (keep && n && keep.length >= Math.ceil(n * 0.8)) keep = null;
+    out[i] = { use: a.use, keep: a.use === 'product' ? keep : [], why: clip(a.why, 160) };
+  });
+  return out;
+}
+
+// Reads their links for real product images, names and counts. A gallery of the templates or products this
+// funnel sells becomes real screenshots for the page and the graphics, so nothing is drawn as a stand-in.
+// Their other sites give facts, colors and fonts, never pictures.
 async function stepCollect(ctx) {
   const f = ctx.f; const q = f.quiz || {}; const v = { ...(f.visuals || {}) };
-  if (!COLLECT.linksOf(q).length) return { note: 'No links given. The page uses your images and drawn art.' };
+  const links = COLLECT.linksOf(q);
+  if (!links.length) return { note: 'No links given. The page uses your images and drawn art.' };
+  const sites = await COLLECT.read(links);
+  const uses = await linkUses(ctx, sites);
+  if (uses.pending) return { pending: true, note: 'Checking which of your links show this product' };
   const r = await COLLECT.collect({
-    q, id: f.id, max: 30, deadline: ctx.deadline,
+    q, id: f.id, max: 30, deadline: ctx.deadline, sites, uses,
     save: (name, data, label) => rpc(ctx.jwt, 'gai_asset_put', { p_name: name, p_mime: 'image/webp', p_role: 'ai', p_label: clip(label, 120), p_data: data }),
   });
   v.refs = r.shots; v.sites = r.sites;
+  const host = (u) => { try { return new URL(u).host.replace(/^www\./, ''); } catch { return u; } };
   const g = r.sites.filter((x) => x.gallery); const bad = r.sites.filter((x) => x.failed);
-  const note = r.shots.length
-    ? `${r.shots.length} real images${g.length ? ` from ${g.map((x) => x.count + ' items on ' + new URL(x.url).host).join(', ')}` : ''}`
-    : 'No usable images found on your links. The page uses your uploads and drawn art.';
-  return { patch: { visuals: v }, note: note + (bad.length ? `. Could not open ${bad.map((x) => x.url).join(', ')}; check the link is public` : '') };
+  const prod = r.sites.filter((x) => x.use === 'product'); const look = r.sites.filter((x) => x.use === 'look'); const about = r.sites.filter((x) => x.use === 'about' && !x.failed);
+  const parts = [];
+  if (r.shots.length) parts.push(`${r.shots.length} real images${g.length ? ` from ${g.map((x) => x.count + ' items on ' + host(x.url)).join(', ')}` : ''}`);
+  else if (prod.length) parts.push(`No usable product images on ${prod.map((x) => host(x.url)).join(', ')}. The page uses your uploads and drawn art`);
+  if (look.length) parts.push(`${look.map((x) => host(x.url)).join(', ')} used for the look only (colors, fonts, style), no images or content`);
+  if (about.length) parts.push(`${about.map((x) => host(x.url)).join(', ')} used for facts about you, no images`);
+  if (!prod.length) parts.push('For real product images, add the link to a page that shows this product, like your template gallery, under Links in the Context step');
+  if (bad.length) parts.push(`Could not open ${bad.map((x) => x.url).join(', ')}; check the link is public`);
+  return { patch: { visuals: v }, note: parts.join('. ') };
 }
 
 const OFFER_SHAPE = '{"name":"","one_liner":"","promise":"","audience":"","transformation":{"before":"","after":""},"timeline":{"first_win":"","result":""},"mechanism":{"name":"","steps":[{"name":"","what":""}]},"price":{"amount":0,"currency":"USD","compare_at":null,"note":"","plans":[{"label":"","amount":0,"every":""}]},"stack":[{"name":"","what":"","value":0}],"bonuses":[{"name":"","what":"","value":0}],"guarantee":{"name":"","days":0,"terms":""},"cta":"","urgency":"","lead_magnet":"","bump":null,"upsells":[{"page":"upsell","name":"","price":0,"what":""}],"changes":"one sentence on what you sharpened"}';
@@ -395,7 +457,16 @@ async function stepOffer(ctx) {
   return { patch: { offer: o }, note: `${o.name || 'Offer'}${o.price.amount ? ', ' + o.price.currency + ' ' + o.price.amount : ''}. ${o.stack.length} stack items, ${o.bonuses.length} bonuses${o.bump ? ', an order bump' : ''}${o.upsells.length ? ', ' + o.upsells.length + ' upsell' + (o.upsells.length > 1 ? 's' : '') : ''}.` };
 }
 
-const SECTION_SHAPE = '{"id":"short-kebab-id","p":"which of the 17P or the page purpose","eyebrow":"","headline":"one *accent phrase* allowed","sub":"","body":["short paragraphs"],"bullets":[""],"items":[{"title":"","body":"","meta":""}],"cta":"","note":""}';
+const SECTION_SHAPE = '{"id":"short-kebab-id","p":"which of the 17P or the page purpose","eyebrow":"","headline":"plain text, only the first section of a page may wrap one phrase in *asterisks*","sub":"","body":["short paragraphs"],"bullets":[""],"items":[{"title":"","body":"","meta":""}],"cta":"","note":""}';
+// The top section of each page keeps its one accent phrase; every other headline is plain, and no section
+// gets a label above its headline. Restrained headline color reads as premium.
+function plainHeads(c) {
+  for (const p of (c && c.pages) || []) {
+    const ss = p.sections || []; const top = ss.find((x) => x && x.id === 'hero') || ss[0];
+    for (const x of ss) { if (!x) continue; x.eyebrow = ''; if (x !== top && typeof x.headline === 'string') x.headline = x.headline.replace(/\*/g, ''); }
+  }
+  return c;
+}
 async function stepCopy(ctx) {
   const f = ctx.f; const pages = pagesOf(f); const T = TYPES[f.funnel_type] || TYPES['sales-page'];
   const notes = ctx.work.coach_copy || (ctx.work.coach_copy = await coaching(ctx.jwt, '17Ps sales page sections headline hook proof objections ' + T.name));
@@ -407,11 +478,12 @@ async function stepCopy(ctx) {
     }
     return `- ${p.path} (${p.name}): ${PAGE_GUIDE[p.path] || PAGE_GUIDE[p.path.replace(/-\d+$/, '')] || 'A focused page that moves the visitor to the next step.'}`;
   }).join('\n');
-  const user = `${brief(f)}\n\nRESEARCH:\n${JSON.stringify(f.research || {}).slice(0, 7000)}\n\nFINAL OFFER:\n${JSON.stringify(f.offer || {}).slice(0, 6000)}\n\n${PACKS.COPY}\n\n${notes ? 'MORE COPY NOTES FROM THE COACHING LIBRARY (use the thinking, never quote or name the source):\n' + notes + '\n\n' : ''}Write the copy for every page of this funnel:\n${guide}\nBefore you write, think it through: the buyer's awareness, the one big idea of the main page, the order of the arguments, and where each objection from the research gets answered. Then write.\nRules:\n- The hero headline is the strongest angle from the research, 12 words or fewer, with one phrase wrapped in *asterisks* for the accent color.\n- Mirror the buyer words from the research. Short paragraphs, one idea each. Scannable bullets.\n- Proof only from the PROOF instructions above or facts found about them. Numbers only when real.\n- Use the offer exactly: its name, method, stack, bonuses, price, guarantee${(f.offer || {}).bump ? ', the order bump on the order page' : ''}${((f.offer || {}).upsells || []).length ? ' and the upsells on their pages' : ''}.\n- Forms, checkout, calendars and videos are slots the owner connects later: write the labels and helper text for them, not the integrations.\n- Every page ends with a clear next step.\nReturn only JSON: {"meta":{"site_title":"","description":""},"pages":[{"path":"index","name":"","title":"","description":"","sections":[${SECTION_SHAPE}]}]}`;
+  const user = `${brief(f)}\n\nRESEARCH:\n${JSON.stringify(f.research || {}).slice(0, 7000)}\n\nFINAL OFFER:\n${JSON.stringify(f.offer || {}).slice(0, 6000)}\n\n${PACKS.COPY}\n\n${notes ? 'MORE COPY NOTES FROM THE COACHING LIBRARY (use the thinking, never quote or name the source):\n' + notes + '\n\n' : ''}Write the copy for every page of this funnel:\n${guide}\nBefore you write, think it through: the buyer's awareness, the one big idea of the main page, the order of the arguments, and where each objection from the research gets answered. Then write.\nRules:\n- The hero headline is the strongest angle from the research, 12 words or fewer, with one phrase wrapped in *asterisks* for the accent color. Every other headline is plain text with no asterisks, and eyebrow stays empty.\n- Mirror the buyer words from the research. Short paragraphs, one idea each. Scannable bullets.\n- Proof only from the PROOF instructions above or facts found about them. Numbers only when real.\n- Use the offer exactly: its name, method, stack, bonuses, price, guarantee${(f.offer || {}).bump ? ', the order bump on the order page' : ''}${((f.offer || {}).upsells || []).length ? ' and the upsells on their pages' : ''}.\n- Forms, checkout, calendars and videos are slots the owner connects later: write the labels and helper text for them, not the integrations.\n- Every page ends with a clear next step.\nReturn only JSON: {"meta":{"site_title":"","description":""},"pages":[{"path":"index","name":"","title":"","description":"","sections":[${SECTION_SHAPE}]}]}`;
   const r = await genJSON(ctx, 'copy', SYS, user, { max: 14000, model: BUILDER, think: 'high', schema: SCHEMA.copy, bg: true });
   if (r.pending) return { pending: true, note: r.kb ? `Still writing the copy (${r.kb} KB so far)` : `Thinking through the copy${r.mins ? ' (' + r.mins + ' min so far)' : ''}` };
   const c = r.json || {}; c.pages = (c.pages || []).filter((p) => p && pages.some((x) => x.path === p.path));
   for (const p of pages) if (!c.pages.some((x) => x.path === p.path)) c.pages.push({ path: p.path, name: p.name, sections: [] });
+  plainHeads(c);
   const words = JSON.stringify(c.pages).replace(/"[a-z_]+":/g, ' ').split(/\s+/).length;
   return { patch: { copy: c }, note: `${c.pages.length} pages, ${c.pages.reduce((a, p) => a + (p.sections || []).length, 0)} sections, about ${Math.round(words / 50) * 50} words` };
 }
@@ -472,6 +544,7 @@ async function stepChief(ctx) {
   if (hero && pick >= 1 && pick <= heads.length) { hero.headline = heads[pick - 1]; picked = heads[pick - 1]; }
   const scores = (ch.scores || []).filter((x) => x && x.id).map((x) => ({ path: String(x.path || 'index'), id: String(x.id), score: Math.max(1, Math.min(10, Math.round(Number(x.score) || 1))), why: clip(x.why, 160) }));
   const avg = scores.length ? Math.round(scores.reduce((a, x) => a + x.score, 0) / scores.length * 10) / 10 : null;
+  plainHeads(copy);
   copy.review = { at: now(), scores, avg, headlines: heads, picked, why: clip((J.headline || {}).why, 240), rewritten, summary: clip(ch.summary, 400), judged: !J.failed };
   delete w.chief; delete w.chief_judge;
   const kept = rewritten.filter((x) => x.kept === 'after').length;
@@ -484,7 +557,7 @@ async function stepWireframe(ctx) {
   const D = dirsFor(f); const scratch = startOf(f) === 'scratch';
   const refs = []; if (!scratch) for (let i = 0; i < n; i++) { const r = LIBR.pick(f, D[i].id, refs.map((x) => x.id)); if (r) refs.push({ n: i + 1, ...LIBR.card(r) }); }
   const outline = (f.copy.pages || []).map((p) => ({ path: p.path, sections: (p.sections || []).map((s) => ({ id: s.id, p: s.p, headline: clip(s.headline, 90), items: (s.items || []).length, bullets: (s.bullets || []).length })) }));
-  const user = `FUNNEL: ${(TYPES[f.funnel_type] || {}).name} for ${(f.quiz || {}).brand || f.title}.\nTEMPLATE: ${t ? t.name + ' (' + t.live + ')' : scratch ? 'none, the owner asked for a design from scratch. Do not base it on any template' : 'none picked, so option 1 follows the closest template from the library'}\nCOPY OUTLINE:\n${JSON.stringify(outline).slice(0, 9000)}\n\n${scratch ? '' : LIBR.playbook(f, refs) + '\n\n'}${((f.visuals || {}).refs || []).length ? `REAL IMAGES AVAILABLE: ${((f.visuals || {}).refs || []).length} real product screenshots from their links, plus a finished hero graphic, a wall of products and a cover per stack item. Plan sections that show them (gallery, wall band, media splits); never plan stand-in thumbnails.\n` : ''}Plan the wireframe for every page: for each section pick a layout (for example split image right, centered stack, bento grid, 3-column cards, numbered timeline, sticky steps, comparison table, stat band with counters, testimonial wall, value stack card, pricing table, FAQ accordion, full-bleed deep band, logo marquee), the visual (photo, AI image, inline SVG icon set, SVG chart or diagram, none) and the motion (reveal, stagger, counter, draw, parallax, none). Vary layouts from section to section. Then describe ${n} design option${n > 1 ? 's' : ''}: ${D.slice(0, n).map((d, i) => `option ${i + 1} "${d.name}": ${d.idea}`).join(' ')}\nReturn only JSON: {"pages":[{"path":"index","sections":[{"id":"","p":"","layout":"","visual":"","motion":"","why":"short"}]}],"options":[{"n":1,"name":"","idea":"two sentences on how this option looks"}]}`;
+  const user = `FUNNEL: ${(TYPES[f.funnel_type] || {}).name} for ${(f.quiz || {}).brand || f.title}.\nTEMPLATE: ${t ? t.name + ' (' + t.live + ')' : scratch ? 'none, the owner asked for a design from scratch. Do not base it on any template' : 'none picked, so option 1 follows the closest template from the library'}\nCOPY OUTLINE:\n${JSON.stringify(outline).slice(0, 9000)}\n\n${scratch ? '' : LIBR.playbook(f, refs) + '\n\n'}${((f.visuals || {}).refs || []).length ? `REAL IMAGES AVAILABLE: ${((f.visuals || {}).refs || []).length} real product screenshots from their links, plus a finished hero graphic, a wall of products and a cover per stack item. Plan sections that show them (gallery, wall band, media splits); never plan stand-in thumbnails.\n` : ((f.quiz || {}).images || []).some((x) => x && x.role === 'product') ? '' : 'NO PRODUCT IMAGES: plan the product visuals as mockups built in HTML and CSS from the real offer (browser windows, document pages, app screens, covers with the real names).\n'}Plan the wireframe for every page: for each section pick a layout (for example split image right, centered stack, bento grid, 3-column cards, numbered timeline, sticky steps, comparison table, stat band with counters, testimonial wall, value stack card, pricing table, FAQ accordion, full-bleed deep band, logo marquee), the visual (product image or mockup, photo, AI image, inline SVG icon set, SVG chart or diagram, none) and the motion (reveal, stagger, counter, draw, parallax, none). Vary layouts from section to section, and use a row of same-size cards at most once per page. Then describe ${n} design option${n > 1 ? 's' : ''}: ${D.slice(0, n).map((d, i) => `option ${i + 1} "${d.name}": ${d.idea}`).join(' ')}\n${n > 1 ? 'Each option must look clearly different at first glance: a different hero composition, a different surface (light, deep or split), a different image treatment and section rhythm, all within the same brand colors and fonts.\n' : ''}For each option also give hero (one sentence on how its first screen is composed: what is largest, where the product visual sits, the surface) and moves (three signature design moves only this option uses).\nReturn only JSON: {"pages":[{"path":"index","sections":[{"id":"","p":"","layout":"","visual":"","motion":"","why":"short"}]}],"options":[{"n":1,"name":"","idea":"two sentences on how this option looks","hero":"","moves":["","",""]}]}`;
   const r = await genJSON(ctx, 'wireframe', SYS, user, { max: 5000 });
   if (r.pending) return { pending: true, note: 'Still planning the layout' };
   const w = r.json || {}; w.options = (w.options || []).slice(0, n);
@@ -495,24 +568,27 @@ async function stepWireframe(ctx) {
   return { patch: { wireframe: w }, note: `${sec} sections planned, ${n} option${n > 1 ? 's' : ''}, ${scratch ? 'designed from scratch, no templates used' : 'built from ' + refs.map((r) => r.name).join(', ') + ' in the template library'}` };
 }
 
+// Colors and fonts of a site, read from its HTML and its own stylesheets.
 async function readSite(url) {
-  if (!/^https?:\/\//.test(url || '')) return null;
-  try {
-    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
-    const r = await fetch(url, { signal: ctl.signal, headers: { 'User-Agent': 'Mozilla/5.0 FunnelOS' } }); clearTimeout(t);
-    const html = (await r.text()).slice(0, 500000);
-    const hex = {}; (html.match(/#[0-9a-fA-F]{6}\b/g) || []).forEach((h) => { h = h.toLowerCase(); hex[h] = (hex[h] || 0) + 1; });
-    const fonts = new Set(); (html.match(/family=([^&"':]+)/g) || []).forEach((m) => fonts.add(decodeURIComponent(m.slice(7)).replace(/\+/g, ' ')));
-    return { url, colors: Object.entries(hex).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([h]) => h), fonts: [...fonts].slice(0, 6) };
-  } catch { return null; }
+  try { return await COLLECT.style(url); } catch { return null; }
 }
 async function stepBrand(ctx) {
   const f = ctx.f; const q = f.quiz || {};
-  const site = q.palette === 'site' || !q.palette ? await readSite((q.urls || [])[0]) : null;
+  // A site they named for its look comes first, then the site they asked to match, then their first link.
+  const sites = (f.visuals || {}).sites || [];
+  const lookSite = sites.find((x) => x.use === 'look' && !x.failed) || (() => { const l = [...COLLECT.lookLinks(q, COLLECT.linksOf(q))][0] || COLLECT.lookDomains(q)[0]; return l ? { url: l } : null; })();
+  const match = !!lookSite || q.palette === 'site';
+  const site = match || !q.palette ? await readSite(lookSite ? lookSite.url : (q.urls || [])[0] || ((sites.find((x) => !x.failed) || {}).url)) : null;
+  const siteLine = !site ? '' : [
+    match ? `MATCH THEIR SITE (${site.url}). They want this funnel to carry its look: the same light or dark character, its colors and its fonts. Build the palette from these colors (background from its page color, ink from its text color, accent from its brand color, deep from its darkest brand color) and use its fonts when they are in the lists below.` : `THEIR CURRENT SITE (${site.url}):`,
+    site.tokens && site.tokens.length ? `Color tokens in its CSS: ${site.tokens.map(([k, h]) => '--' + k + ' ' + h).join(', ')}` : '',
+    site.colors.length ? `Most used colors: ${site.colors.join(', ')}` : '',
+    site.fonts.length ? `Fonts: ${site.fonts.join(', ')}` : '',
+  ].filter(Boolean).join('\n');
   const fixed = [];
   if (q.palette && typeof q.palette === 'object' && HEX.test(q.palette.bg || '') && HEX.test(q.palette.ink || '') && HEX.test(q.palette.accent || '')) fixed.push(`THEY CHOSE THESE COLORS. Use them exactly: background ${q.palette.bg}, ink ${q.palette.ink}, accent ${q.palette.accent}${HEX.test(q.palette.deep || '') ? ', deep ' + q.palette.deep : ''}. Derive the rest so they sit well together.`);
   if (q.fonts && q.fonts.display && q.fonts.body) fixed.push(`THEY CHOSE THESE FONTS: display ${q.fonts.display}, body ${q.fonts.body}${q.fonts.files ? ' (their own font files)' : ''}. Return exactly these.`);
-  const user = `${fixed.join('\n')}\n\n${brief(f, true)}\n\nOFFER: ${JSON.stringify({ name: (f.offer || {}).name, promise: (f.offer || {}).promise })}\n${site ? `THEIR CURRENT SITE (${site.url}): colors ${site.colors.join(', ')}; fonts ${site.fonts.join(', ')}` : ''}\n${q.vibe ? 'THE LOOK THEY WANT: ' + clip(q.vibe, 400) : ''}\n\nBuild the brand kit for this funnel. Restrained and premium: one background, near-black ink, one accent used with care, one deep color for dark bands. Accessible contrast (accent_ink must read on accent). Fonts only from these Google Fonts. Display: ${DISPLAY.join(', ')}. Body: ${BODY.join(', ')}. Then write the art direction and three image prompts in one consistent style that fits the palette: hero (landscape 3:2), feature (square), detail (portrait 2:3). Images contain no text, letters, logos, UI or screens with words, and no faces of real people.\nReturn only JSON: {"name":"","logo_text":"","palette":{"bg":"#","surface":"#","ink":"#","muted":"#","line":"#","accent":"#","accent_ink":"#","deep":"#","deep_ink":"#"},"fonts":{"display":"","body":""},"radius":14,"voice":["4 short voice rules"],"look":"two sentences","art_direction":"","prompts":{"hero":"","feature":"","detail":""}}`;
+  const user = `${fixed.join('\n')}\n\n${brief(f, true)}\n\nOFFER: ${JSON.stringify({ name: (f.offer || {}).name, promise: (f.offer || {}).promise })}\n${siteLine}\n${q.vibe ? 'THE LOOK THEY WANT: ' + clip(q.vibe, 400) : ''}\n\nBuild the brand kit for this funnel. Restrained and premium: one background, near-black ink, one accent used with care, one deep color for dark bands. Accessible contrast (accent_ink must read on accent). Fonts only from these Google Fonts. Display: ${DISPLAY.join(', ')}. Body: ${BODY.join(', ')}. Then write the art direction and three image prompts in one consistent style that fits the palette: hero (landscape 3:2), feature (square), detail (portrait 2:3). Images contain no text, letters, logos, UI or screens with words, and no faces of real people.\nReturn only JSON: {"name":"","logo_text":"","palette":{"bg":"#","surface":"#","ink":"#","muted":"#","line":"#","accent":"#","accent_ink":"#","deep":"#","deep_ink":"#"},"fonts":{"display":"","body":""},"radius":14,"voice":["4 short voice rules"],"look":"two sentences","art_direction":"","prompts":{"hero":"","feature":"","detail":""}}`;
   const r = await genJSON(ctx, 'brand', SYS, user, { max: 2500 });
   if (r.pending) return { pending: true, note: 'Still on the brand kit' };
   const b = r.json || {};
@@ -610,14 +686,19 @@ const KIT_DOC = `MOTION KIT. Load it once per page with <script src="{{kit}}" de
 - data-accordion on a FAQ wrapper of <details> elements keeps one open at a time.
 Do not write scroll listeners or IntersectionObserver code yourself, and never hide content with CSS outside these attributes. Content must be readable if the script never loads.`;
 const TASTE = `Design standard (a page that fails one of these is not done):
-- Show the real thing. When real product screenshots or finished graphics are given, they carry the page: the hero graphic in the first screen, the wall as a full-bleed band, a different real screenshot in each section that talks about the product, covers next to their stack items. Never draw grey bars, empty boxes, skeleton cards or wireframe thumbnails to stand in for a product when real images exist. A gallery of real screenshots with their real names beats any illustration.
+- Art direction first. Before writing code, settle the visual idea of this page in one line from the brand kit, the offer and this option's direction (for example a dark product studio, an editorial catalog, a warm workshop), then hold it in every section: the same surfaces, image framing, radius, line weight and type voice. It should feel made for this one product by a top studio.
+- The first screen is a composed scene. The headline is set big (about 56 to 96px on desktop, 40 to 52px on phones) with tight leading (1.0 to 1.1) and balanced wrapping. The product visual is the largest object on the screen, at least half the width on desktop, with real depth: overlapping planes, a soft shadow with a downward offset, or a tinted stage in the surface or deep color behind it. A small picture floating beside a column of text is a weak hero.
 - The first screen says what is sold, who it is for and one hard fact (a count, a price, a timeframe), with one primary button whose label is a verb plus an object, like "Get the templates".
-- Typography: display headlines with letter-spacing no tighter than -0.04em, body text 16 to 18px with line-height 1.5 to 1.7 and a measure of 60 to 75 characters. A clear scale with few sizes.
-- Structure changes from section to section. Repeating identical cards of icon, heading and two lines is not a layout; use it at most once. Mix a large media split, a dense list, a gallery, a comparison, a quote, a stat line.
-- Do not use: small uppercase eyebrow labels above every heading, gradient text, section numbers like 01 and 02 as decoration, frosted glass panels, colored side borders thicker than 1px, hard offset shadows, emoji icons, generic stock-photo looks, centered text everywhere.
-- Cards and frames: radius 12 to 16px, 1px borders in the line color or soft long shadows, never both heavy. Images keep their aspect ratio and never stretch.
-- One authored motion moment (for example the hero graphic easing in or the wall drifting); everything else reveals quietly or not at all. No bounce.
-- Color: the background, near-black ink, one accent used for buttons and key words only, the deep color for one or two dark bands. Text contrast passes AA everywhere, including on images. Style ::selection and :focus-visible in the brand colors.
+- Show the real thing. When real product screenshots or finished graphics are given, they carry the page: the hero graphic in the first screen, the wall as a full-bleed band, a different real screenshot in each section that talks about the product, covers next to their stack items. With no product images, build the product in HTML and CSS from the real copy: browser windows, document pages, app screens or covers that carry the real names from the offer. Never draw grey bars, empty boxes, skeleton cards or wireframe thumbnails.
+- Only images that belong to this offer: the product being sold, its covers and graphics, the owner and their logo. Never show pictures of other products, programs or pages from their website, and never use a website screenshot as decoration. AI images are mood: use them as a backdrop, a band or a crop beside the story, never as the picture of the product.
+- Typography: four or five sizes with clear steps, display letter-spacing between -0.04em and -0.01em, text-wrap: balance on headings and text-wrap: pretty on paragraphs, body 16 to 18px with line-height 1.5 to 1.7 and a measure of 60 to 75 characters, more space above a heading than below it, font-variant-numeric: tabular-nums on prices and counts.
+- Headline color stays calm. The one phrase in *asterisks* in the top headline gets the accent treatment: the accent color when it passes 4.5:1 on its background, otherwise the display italic or the deep color. Every other headline is one color, the text color of its surface, with no colored words.
+- No small labels, kickers or dash-prefixed lines above headings, in any section. The headline carries the section.
+- Structure changes from section to section: a large media split, a full-bleed band, a gallery or bento, a dense list, a comparison, a quote, a quiet text moment. Vary section padding (about 96 to 160px on desktop) and alignment. A row of same-size cards with an icon, a heading and two lines appears at most once on the page. No strip of three big numbers with small labels unless the numbers are the argument.
+- Do not use: gradient text, section numbers like 01 and 02 as decoration, frosted glass panels, a colored bar down one side of a card, hard offset shadows, emoji icons, SVG drawings that imitate photos or scenes, generic stock-photo looks, centered text everywhere, decorative grids, stripes or noise overlays.
+- Finish: cards and frames with a 12 to 16px radius and 28 to 48px inner padding, either a 1px border in the line color or a soft long shadow (never both on one card), hairline dividers, small muted captions under images, real hover and active states on buttons and links, a set underline offset on text links, buttons at least 48px tall. Images keep their aspect ratio and never stretch.
+- One authored motion moment (for example the hero visual easing in or the wall drifting); everything else appears with a short fade or not at all, and all content is visible before any animation runs. No bounce.
+- Color: the background, near-black ink, one accent for buttons and small details, the deep color for one or two dark bands with a soft light in the brand colors. Never set text in the accent where it fails 4.5:1. Text contrast passes AA everywhere, including on images. Secondary text on a dark band is a tint of its light text, never plain grey. Style ::selection and :focus-visible in the brand colors.
 - Price, what is included, the guarantee and the button are easy to find twice on the page: once in the middle, once at the end.`;
 const DESIGNER = `You are a world-class conversion designer and front-end engineer. You hand-build funnel pages as single self-contained HTML files that look like a premium studio made them for this exact brand: a clear typographic system, generous rhythm, strong hierarchy, real art direction, and layouts that change from section to section. They must convert: one offer, one action per page, the price and guarantee easy to find, objections answered.
 Technical rules:
@@ -664,8 +745,8 @@ function imgList(f) {
   return ((f.visuals || {}).images || []).filter((x) => !x.auto).map((x) => {
     let kind;
     if (x.own) kind = x.role === 'logo' ? 'their logo' : x.role === 'me' ? 'real photo of the owner, never crop the face' : x.role === 'product' ? 'their product photo' : 'their image';
-    else if (x.kind === 'shot') kind = `real screenshot of "${x.title}"${x.label ? ' (' + x.label + ')' : ''}, ${x.w}x${x.h}, top of the page. Show it in a simple frame with object-fit: cover and object-position: top`;
-    else if (x.kind === 'site') kind = 'image from their own website';
+    else if (x.kind === 'shot') kind = `real screenshot of the product: "${x.title}"${x.label ? ' (' + x.label + ')' : ''}, ${x.w}x${x.h}, top of the page. Show it in a simple frame with object-fit: cover and object-position: top`;
+    else if (x.kind === 'site') kind = 'image from their website. Use it only if it shows this offer or the owner, otherwise leave it out';
     else if (x.kind === 'hero') kind = `finished hero graphic, ${x.w}x${x.h}, transparent background with its own windows and shadows. Place it large in the first screen with no extra frame, border or shadow`;
     else if (x.kind === 'wall') kind = `finished full-bleed wall of many real products, ${x.w}x${x.h}, on the deep brand color. Use it as a wide band (object-fit: cover) to show the size of the collection`;
     else if (x.kind === 'cover') kind = `finished product cover for "${x.item}", ${x.w}x${x.h} square, transparent background. Show it next to that item in the value stack or bonus section, no extra frame`;
@@ -677,7 +758,9 @@ function pageSpec(f, opt, page) {
   const o = ((f.wireframe || {}).options || [])[opt - 1] || dirsFor(f)[opt - 1] || DIRECTIONS[opt - 1];
   const cp = ((f.copy || {}).pages || []).find((p) => p.path === page.path) || {};
   const wf = ((f.wireframe || {}).pages || []).find((p) => p.path === page.path) || {};
-  return `THIS PAGE: ${page.name} (path ${page.path}).\nDESIGN OPTION ${opt}: ${o.name}. ${o.idea}\nWIREFRAME FOR THIS PAGE:\n${JSON.stringify(wf).slice(0, 5000)}\nCOPY FOR THIS PAGE (every section must appear):\n${JSON.stringify(cp).slice(0, 24000)}`;
+  const moves = (Array.isArray(o.moves) ? o.moves : []).map((m) => clip(m, 200)).filter(Boolean).slice(0, 4);
+  const own = opt > 1 ? `\nThe wireframe gives the content order. This option must not look like option 1: compose its own hero and pick its own layout for at least half of the sections, in this direction.` : '';
+  return `THIS PAGE: ${page.name} (path ${page.path}).\nDESIGN OPTION ${opt}: ${o.name}. ${o.idea}${o.hero ? '\nHERO: ' + clip(o.hero, 400) : ''}${moves.length ? '\nSIGNATURE MOVES: ' + moves.join('; ') : ''}${own}\nWIREFRAME FOR THIS PAGE:\n${JSON.stringify(wf).slice(0, 5000)}\nCOPY FOR THIS PAGE (every section must appear):\n${JSON.stringify(cp).slice(0, 24000)}`;
 }
 function kitBrief(f) {
   return `Funnel pages you can link to: ${pagesOf(f).map((p) => `${p.name} = {{page:${p.path}}}`).join(', ')}.\nBRAND KIT:\n${JSON.stringify(f.brand || {}).slice(0, 4000)}\nFINAL OFFER:\n${JSON.stringify(f.offer || {}).slice(0, 5000)}\nIMAGES:\n${JSON.stringify(imgList(f))}\nUse their logo in the header if there is one, otherwise a typographic wordmark of "${(f.brand || {}).logo_text || f.title}". With no image for a section, draw the art with CSS and inline SVG.\n${fontFaces(f)}\n${KIT_DOC}`;
@@ -1120,7 +1203,7 @@ async function qaPage(ctx, { f, n, o, x, facts, C }) {
   serious.forEach((p) => { checks.push({ ok: false, label: nm + `${p.device === 'both' ? '' : p.device === 'phone' ? 'Phone, ' : 'Desktop, '}${p.section ? p.section + ': ' : ''}${clip(p.issue, 160)}`, by: 'review' }); flag.push(`${p.device === 'both' ? 'Desktop and phone' : p.device === 'phone' ? 'Phone' : 'Desktop'}${p.section ? ', section ' + p.section : ''}: ${p.issue}. Fix: ${p.fix}`); });
   const lookScore = B.look ? B.look.score : null; const ds = L.design ? +L.design.score : null;
   if (lookScore !== null || ds !== null) {
-    const weak = (lookScore !== null && lookScore < 1.8) || (ds !== null && ds < 6);
+    const weak = (lookScore !== null && lookScore < 1.8) || (ds !== null && ds < (path === 'index' ? 8 : 7));
     checks.push({ ok: !weak, label: nm + `Visual polish ${ds !== null ? ds.toFixed(0) : (lookScore / 3 * 10).toFixed(1)} out of 10`, p: lookScore, by: 'screenshot' });
     if (weak) flag.push(`Design pass: the page looks plain or unfinished.${L.design && L.design.weakest ? ' Weakest part: ' + L.design.weakest + '.' : ''}${L.design && L.design.direction ? ' Direction: ' + L.design.direction : ' Strengthen the hierarchy, spacing and real images section by section.'}`);
   }
@@ -1138,7 +1221,7 @@ function lookPrompt(f, path, facts, t) {
 THE IMAGES, IN ORDER:
 ${[...dt.map((tl, i) => label(tl, i, dt)), ...pt.map((tl, i) => label(tl, i, pt))].map((x) => '- ' + x).join('\n') || '- none'}
 ${fx.length ? 'MEASURED IN THE BROWSER (already known, include them only if you see more):\n' + fx.map((x) => '- ' + x).join('\n') + '\n' : ''}
-Review these screenshots. List up to 8 problems, worst first, each with the page path "${path}", the device, the section id or heading, severity (high: broken or blocks buying; medium: clearly hurts trust or clarity; low: polish), the issue and the exact fix. Then score the design from 1 to 10 against a premium studio build (6 is plain but fine), name the weakest section and give one direction for a design pass. Return only JSON.`;
+Review these screenshots. List up to 8 problems, worst first, each with the page path "${path}", the device, the section id or heading, severity (high: broken or blocks buying; medium: clearly hurts trust or clarity; low: polish), the issue and the exact fix. Then score the design from 1 to 10 against a premium studio build (5 is a generic template, 7 is clean but ordinary, 9 is what a top studio would ship for this brand), name the weakest section and give one direction for a design pass. Return only JSON.`;
 }
 
 async function stepFix(ctx) {
@@ -1148,7 +1231,7 @@ async function stepFix(ctx) {
   const pend = []; const done = new Set(w.fixed_opts || []);
   await Promise.all(jobs.map(async ({ n, path, fx }) => {
     const cur = (files.find((x) => x.opt === n && x.path === path) || {}).content; if (!cur) { delete fixes[n][path]; return; }
-    const user = `${brief(f, true)}\nFACTS YOU MAY USE: ${JSON.stringify({ offer: f.offer, real_proof: proofMode(f.quiz || {}) === 'none' ? 'none' : (f.quiz || {}).proof || 'none' }).slice(0, 5000)}\nIMAGES: ${JSON.stringify(imgList(f))}\nPAGES: ${pagesOf(f).map((p) => `{{page:${p.path}}}`).join(', ')}\n\n${KIT_DOC}\n\nTHE CURRENT PAGE (${path}, ${pageName(f, path)}):\n${cur.slice(0, 150000)}\n\nTHE QUALITY CHECK FOUND, ON THE LIVE PAGE AT DESKTOP AND PHONE SIZE:\n${[...fx.flag, ...fx.code].map((x) => '- ' + x).join('\n')}\n\nFix exactly these problems, section by section, and keep everything else as it is: the copy, the facts, the images and the design system. A design pass means improving hierarchy, spacing, contrast and image use in the named sections without changing the words. Return the full corrected HTML file.`;
+    const user = `${brief(f, true)}\nFACTS YOU MAY USE: ${JSON.stringify({ offer: f.offer, real_proof: proofMode(f.quiz || {}) === 'none' ? 'none' : (f.quiz || {}).proof || 'none' }).slice(0, 5000)}\nIMAGES: ${JSON.stringify(imgList(f))}\nPAGES: ${pagesOf(f).map((p) => `{{page:${p.path}}}`).join(', ')}\n\n${KIT_DOC}\n\nTHE CURRENT PAGE (${path}, ${pageName(f, path)}):\n${cur.slice(0, 150000)}\n\nTHE QUALITY CHECK FOUND, ON THE LIVE PAGE AT DESKTOP AND PHONE SIZE:\n${[...fx.flag, ...fx.code].map((x) => '- ' + x).join('\n')}\n\nFix exactly these problems, section by section, and keep everything else as it is: the copy, the facts, the images, the colors and the fonts. A design pass may recompose layouts (the hero composition, section layouts, image size and placement, the type scale, spacing and surfaces) until the page meets the design standard, without changing the words. Remove any image the check calls off-topic. Return the full corrected HTML file.`;
     const r = await gen(ctx, `fix-${n}-${path}-${round}`, DESIGNER, user, { max: 30000, model: BUILDER, bg: true });
     if (r.pending) { pend.push(`option ${n} ${pageName(f, path)}${r.kb ? ' ' + r.kb + ' KB' : ''}`); return; }
     try { await rpc(ctx.jwt, 'gai_funnel_file_put', { p_id: f.id, p_opt: n, p_path: path, p_content: tidy(r.text) }); done.add(n); } catch { /* keep the page as it was */ }
@@ -1273,4 +1356,4 @@ function zip(files) {
   return Buffer.concat([...parts, cd, e]);
 }
 
-module.exports = { KIT_FILE, GH, ghH, siteUrl, esc, stepChief, stepQA, stepFix, pageJob, cleanHead, factChecks, startOf, dirsFor, refOf, MAX_OPTS, launchCheck, launchMeta, siteFacts, stepCollect, proofMode, guessIntent, fontFaces, TYPES, P17, DIRECTIONS, DISPLAY, BODY, LABEL, ORDER, TPL, tplById, pagesOf, keys, run, gen, genJSON, parseJSON, brief, coaching, filesFor, resolve, staticQA, tidy, zip, readme, deployVercel, pushGitHub, jf, SYS, HOUSE, BUILDER, MOTION, slug };
+module.exports = { KIT_FILE, GH, ghH, siteUrl, esc, plainHeads, researchFresh, stepChief, stepQA, stepFix, pageJob, cleanHead, factChecks, startOf, dirsFor, refOf, MAX_OPTS, launchCheck, launchMeta, siteFacts, stepCollect, proofMode, guessIntent, fontFaces, TYPES, P17, DIRECTIONS, DISPLAY, BODY, LABEL, ORDER, TPL, tplById, pagesOf, keys, run, gen, genJSON, parseJSON, brief, coaching, filesFor, resolve, staticQA, tidy, zip, readme, deployVercel, pushGitHub, jf, SYS, HOUSE, BUILDER, MOTION, slug };

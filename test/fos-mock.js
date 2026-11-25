@@ -21,7 +21,11 @@ function reply(b) {
   const has = (s) => first.includes(s);
   let out = null; let kind = null;
   const k = (name, text) => { kind = name; out = text; };
-  if (has('Research this market')) k('research', JSON.stringify({ summary: 'Runners with knee pain try rest and generic plans first.', audience: { who: 'Runners 30 to 55', pains: ['Knee hurts after 5k'], desires: ['Run a half marathon'], objections: ['I tried physio before'], words: ['runner\'s knee'] }, competitors: [{ name: 'KneeFix', offer: 'Video course', price: '$199', angle: 'Home exercises', url: 'https://example.com/kneefix' }], price_range: '$150 to $600', angles: ['Run again in six weeks'], gaps: ['1:1 calls'], about: { bio: '', credentials: [], proof: [], numbers: [] }, sources: [{ title: 'Runner forum', url: 'https://example.com/forum' }] }));
+  if (has('Sort these links')) {
+    // The gallery shows the product; any other site is about them.
+    const links = [...first.matchAll(/^LINK (\d+): (\S+)/gm)].map((m) => ({ n: +m[1], url: m[2] }));
+    k('links', JSON.stringify({ links: links.map((l) => (/mock-gallery/.test(l.url) ? { n: l.n, use: 'product', keep: [1, 2, 3, 4, 5, 6, 7, 8], why: 'Shows the templates' } : { n: l.n, use: 'about', keep: [], why: 'Their own site' })) }));
+  } else if (has('Research this market')) k('research', JSON.stringify({ summary: 'Runners with knee pain try rest and generic plans first.', audience: { who: 'Runners 30 to 55', pains: ['Knee hurts after 5k'], desires: ['Run a half marathon'], objections: ['I tried physio before'], words: ['runner\'s knee'] }, competitors: [{ name: 'KneeFix', offer: 'Video course', price: '$199', angle: 'Home exercises', url: 'https://example.com/kneefix' }], price_range: '$150 to $600', angles: ['Run again in six weeks'], gaps: ['1:1 calls'], about: { bio: '', credentials: [], proof: [], numbers: [] }, sources: [{ title: 'Runner forum', url: 'https://example.com/forum' }] }));
   else if (has('Turn what they sell into the final offer')) k('offer', '```json\n' + JSON.stringify({ name: 'Knee Reset', one_liner: 'Six weeks to pain-free runs', promise: 'Run 10k without knee pain in six weeks', audience: 'Runners 30 to 55', transformation: { before: 'Resting a sore knee and skipping runs', after: 'Running 10k again without pain' }, timeline: { first_win: 'A pain-free 20 minute run in week two', result: '10k in six weeks' }, mechanism: { name: 'The Reset Method', steps: [{ name: 'Calm', what: 'Settle the pain' }, { name: 'Build', what: 'Strength' }, { name: 'Return', what: 'Back to running' }] }, price: { amount: 497, currency: 'USD', compare_at: null, note: '', plans: [{ label: '3 payments', amount: 179, every: 'month' }] }, stack: [{ name: 'Weekly sessions', what: 'Six live sessions', value: 600 }], bonuses: [], guarantee: { name: 'Run-again guarantee', days: 30, terms: 'Full refund' }, cta: 'Join Knee Reset', urgency: '', lead_magnet: '', bump: { name: 'Taping guide', price: 19, what: 'How to tape the knee for long runs' }, upsells: [], changes: 'Named the method.' }) + '\n```');
   else if (has('Write the copy for every page')) k('copy', JSON.stringify({ meta: { site_title: 'Knee Reset', description: 'Six weeks to pain-free runs' }, pages: [{ path: 'index', name: 'Sales page', title: 'Knee Reset', description: 'x', sections: [{ id: 'hero', p: 'Promise', headline: 'Run without *knee pain*', sub: 'Six weeks', body: ['Short'], bullets: [], items: [], cta: 'Join', note: '' }] }, { path: 'thank-you', name: 'Thank you', sections: [{ id: 'next', p: 'Next steps', headline: 'You are in', body: ['Check your email'] }] }] }));
   else if (has('THE COPY TO REVIEW, EVERY PAGE OF THE FUNNEL')) k('chief', JSON.stringify(CHIEF));
@@ -40,6 +44,10 @@ function reply(b) {
   else if (has("THE OWNER'S CHANGE REQUEST")) k('revise', H('Knee Reset', 'Changed: ' + (first.match(/CHANGE REQUEST:\n([^\n]+)/) || [])[1]));
   else if (has('Rewrite this into a sharper')) k('rewrite', 'Offer name\nKnee Reset\n\nWho it is for\nRunners 30 to 55 with knee pain\n\nWhat is included\n1. Six weekly sessions\n2. Strength plan\n\nPrice and payment options\n497 dollars [confirm the payment plan]');
   if (out == null) return null;
+  // The latest prompt of each kind, so tests can check what the AI was told.
+  LOG.prompts = LOG.prompts || {};
+  if (['links', 'brand', 'copy', 'wireframe'].includes(kind)) LOG.prompts[kind] = first.slice(0, 60000);
+  if (kind === 'build') LOG.prompts.build = ((LOG.prompts.build || '') + '\n' + first.slice(0, 60000)).slice(-400000);
   const images = b.input.reduce((a, m) => a + (m.content || []).filter((c) => c.type === 'input_image').length, 0);
   const cont = b.input.length >= 3 && b.input[b.input.length - 2].role === 'assistant';
   LOG.agent.push({ kind, bg: !!b.background, think: (b.reasoning || {}).effort || null, schema: ((b.response_format || {}).json_schema || {}).name || null, images, model: b.model, cont });
@@ -195,4 +203,17 @@ async function gallery(req, res, u) {
   res.end(`<!doctype html><html><head><title>Mock Library: 8 templates</title><meta name="description" content="Eight designs"></head><body><img src="logo.png" alt="logo" width="40" height="40"><h1>8 designs, ready to customize.</h1>${cats.map((c) => `<section class="cat" id="${c}"><h2>${c[0].toUpperCase() + c.slice(1)}</h2></section>`).join('')}<ul>${cards}</ul></body></html>`);
 }
 
-module.exports = { LOG, FIXED, reply, agentText, decisions, vercel, github, openrouter, shot, gallery, studioState, resetStudio };
+// A brand site with its own programs: colors and fonts in its stylesheet, product cards that are not the offer.
+async function brandSite(req, res, u) {
+  if (u.pathname.endsWith('/site.css')) {
+    res.writeHead(200, { 'Content-Type': 'text/css' });
+    return res.end("@font-face{font-family:'Bricolage Grotesque';src:url(b.woff2) format('woff2')}:root{--ink:#0a1207;--paper:#f4f6ef;--brand:#c6f24e;--navy:#0f1a0b;--font-weight-bold:700;--display:\"Bricolage Grotesque\",system-ui,sans-serif}body{background:var(--paper);color:var(--ink);font-family:'Instrument Sans',sans-serif}h1{font-family:var(--display)}.btn{background:#c6f24e}");
+  }
+  const m = u.pathname.match(/\/p(\d+)\.png$/); if (m) return gallery(req, res, { pathname: '/mock-gallery/p' + m[1] + '.png' });
+  const names = ['Mock Coaching Program', 'Mock AI Agents', 'Mock Vault', 'Mock Live Calls', 'Mock Snapshot', 'Mock Fastlane'];
+  const cards = names.map((n, i) => `<li class="card"><img src="p${i}.png" width="800" height="1000" alt="${n}"><h3>${n}</h3><p class="label">Program</p></li>`).join('');
+  res.writeHead(200, { 'Content-Type': 'text/html' });
+  res.end(`<!doctype html><html><head><title>Mock Academy | Build a business with AI</title><link rel="stylesheet" href="site.css"><meta name="description" content="Programs, agents and coaching."></head><body><h1>Build your business with AI.</h1><ul>${cards}</ul></body></html>`);
+}
+
+module.exports = { LOG, FIXED, reply, agentText, decisions, vercel, github, openrouter, shot, gallery, brandSite, studioState, resetStudio };

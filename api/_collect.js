@@ -1,6 +1,7 @@
 // Reads the pages the member points at and keeps what is real on them: the product names, categories,
 // counts and preview images. A template gallery, a product grid or a course page gives the build real
-// screenshots and names to sell with, so it never has to draw stand-in boxes.
+// screenshots and names to sell with, so it never has to draw stand-in boxes. A site they point at for
+// its look, or one that sells other things, gives colors, fonts and facts only, never images.
 const sharp = require('sharp');
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36 FunnelOS';
@@ -104,17 +105,110 @@ async function screenshot(url, w = 1440, h = 900) {
   } catch { return null; }
 }
 
-// Reads every link, keeps up to `max` real images and saves them through `save(name, b64, label)`.
-async function collect({ q, id, max = 30, save, deadline }) {
-  const links = linksOf(q); const sites = []; const shots = [];
+// Every link read and parsed. A link that does not open is kept as failed, so the member hears about it.
+async function read(links) {
   const pages = await Promise.all(links.map((u) => get(u)));
-  for (let i = 0; i < links.length; i++) { const p = pages[i]; if (p) sites.push(parse(p.html, p.url)); else sites.push({ url: links[i], failed: true, items: [], count: 0, cats: {}, labels: {} }); }
-  const gal = sites.filter((s) => s.gallery);
-  const per = gal.length ? Math.ceil(max / gal.length) : 0;
+  return links.map((u, i) => (pages[i] ? { ...parse(pages[i].html, pages[i].url), asked: u } : { url: u, asked: u, failed: true, items: [], count: 0, cats: {}, labels: {} }));
+}
+
+// Links the member points at for the look only: named in the look field, or written next to words like
+// "branding from", "colors", "fonts", "style of" or "looks like".
+const LOOK_RE = /\bbrand(ing)?\b|\blook(s|ing)? like\b|\bthe look\b|\blook and feel\b|\bsame look\b|\bstyl(e|ed|ing)\b|\bcolou?rs?\b|\bfonts?\b|\btypography\b|\bdesign(ed)? like\b|\bvibe\b|\baesthetic\b|\binspired by\b|\binspiration\b|\bpalette\b|\bmatch(ing)? (the|my|our|their)\b/i;
+const hostOf = (u) => { try { return new URL(u).host.replace(/^www\./, '').toLowerCase(); } catch { return ''; } };
+// A home page counts when its domain is named; a deeper page only when its own path is named, so a
+// product page on the same site as the look stays a product page.
+function lookLinks(q, links) {
+  const out = new Set();
+  const texts = [q.notes, q.offer, q.vibe, ...((q.docs || []).map((d) => d.text))].map((t) => String(t || '').toLowerCase());
+  for (const u of links) {
+    const h = hostOf(u); if (!h) continue;
+    let p = ''; try { p = decodeURI(new URL(u).pathname).replace(/\/+$/, '').toLowerCase(); } catch { p = ''; }
+    const n = h + p;
+    if (String(q.vibe || '').toLowerCase().includes(n)) { out.add(u); continue; }
+    for (const t of texts) {
+      for (let i = t.indexOf(n); i !== -1 && !out.has(u); i = t.indexOf(n, i + 1)) {
+        if (LOOK_RE.test(t.slice(Math.max(0, i - 80), i + n.length + 50))) out.add(u);
+      }
+      if (out.has(u)) break;
+    }
+  }
+  return out;
+}
+
+// Sites named for the look without https, like "use my branding from yoursite.com" in the look field.
+// Any domain in the look field counts; in the notes or offer only next to the same look words.
+const DOMAIN_RE = /(^|[^a-z0-9@.\/-])((?:[a-z0-9-]+\.)+(?:com|io|co|ai|app|dev|net|org|me|so|xyz|site|online|store|shop|studio|design|agency|academy|pro|page|tv|fi|se|no|dk|de|nl|fr|es|it|uk|ca|au|us))(?![a-z0-9-])/gi;
+function lookDomains(q) {
+  const out = [];
+  const add = (d) => { d = d.toLowerCase().replace(/^www\./, ''); if (!out.includes(d)) out.push(d); };
+  for (const m of String(q.vibe || '').matchAll(DOMAIN_RE)) add(m[2]);
+  for (const t of [q.notes, q.offer].map((x) => String(x || ''))) {
+    for (const m of t.matchAll(DOMAIN_RE)) { const i = m.index + m[1].length; if (LOOK_RE.test(t.slice(Math.max(0, i - 80), i + m[2].length + 50))) add(m[2]); }
+  }
+  return out.slice(0, 3).map((d) => 'https://' + d);
+}
+
+// Words that say what the offer is, for the fallback check when the AI read is not available.
+const STOP = new Set('with your from that this into what will have more best free learn build business online today pack launch page pages site website home your their them they about just like make need want only also every each other which where when there here these those than then very much many most some such using used get gets got course program offer'.split(' '));
+const wordsOf = (t) => new Set(String(t || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 4 && !STOP.has(w)).map((w) => w.replace(/s$/, '')));
+// The quick read of each link when the AI is not available: look links stay look, a page that names the
+// offer is the product, anything else is about them.
+function guessUses(q, sites) {
+  const look = lookLinks(q, sites.map((s) => s.asked || s.url));
+  const want = wordsOf(q.offer_name || String(q.offer || '').slice(0, 200));
+  return sites.map((s) => {
+    if (s.failed) return { use: 'about', keep: [] };
+    if (look.has(s.asked || s.url)) return { use: 'look', keep: [] };
+    const inOffer = String(q.offer || '').includes(String(s.asked || s.url).replace(/\/$/, ''));
+    const got = wordsOf([s.title, s.h1].join(' ')); let hit = 0; got.forEach((w) => { if (want.has(w)) hit++; });
+    const named = want.size && hit >= Math.min(2, want.size);
+    return inOffer || named || (s.gallery && hit >= 1 && !q.offer_name) ? { use: 'product', keep: null } : { use: 'about', keep: [] };
+  });
+}
+
+// The look of a site: its color tokens, most used colors and font families, from the HTML and up to four
+// of its own stylesheets, since most sites keep their colors and fonts in CSS files.
+async function style(url) {
+  if (!/^https?:\/\//.test(url || '')) return null;
+  const p = await get(url, 8000); if (!p) return null;
+  const html = p.html.slice(0, 800000); const base = p.url || url;
+  const sheets = [...html.matchAll(/<link\b[^>]*>/gi)].map((m) => m[0]).filter((t) => /rel\s*=\s*["']?[^"'>]*stylesheet/i.test(t)).map((t) => abs(attr(t, 'href'), base)).filter((h) => /^https?:/.test(h) && !/fonts\.googleapis|typekit|font-awesome|fontawesome|bootstrap(\.min)?\.css/i.test(h));
+  const css = await Promise.all(sheets.slice(0, 4).map((h) => get(h, 6000).then((r) => (r ? r.html.slice(0, 400000) : ''))));
+  const inline = (html.match(/<style[\s\S]*?<\/style>/gi) || []).join('\n');
+  const all = [inline, ...css].join('\n'); const every = all + '\n' + html;
+  const full = (h) => { h = h.toLowerCase(); return h.length === 4 ? '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3] : h.slice(0, 7); };
+  const tokens = []; const seenT = new Set();
+  for (const m of all.matchAll(/--([a-z][a-z0-9-]{1,40})\s*:\s*(#[0-9a-f]{6}|#[0-9a-f]{3})\b/gi)) {
+    const k = m[1].toLowerCase(); if (seenT.has(k) || /^tw-|^(color-)?(black|white)$|shadow|ring/.test(k)) continue; seenT.add(k); tokens.push([k, full(m[2])]);
+  }
+  const hex = {}; (every.match(/#[0-9a-f]{6}\b/gi) || []).forEach((h) => { h = h.toLowerCase(); hex[h] = (hex[h] || 0) + 1; });
+  const GENERIC = /^(inherit|initial|unset|serif|sans-serif|monospace|cursive|system-ui|ui-[a-z-]+|-apple-system|blinkmacsystemfont|segoe ui|roboto|helvetica( neue)?|arial|georgia|menlo|monaco|consolas|courier( new)?|times( new roman)?|noto sans|liberation mono|sfmono-regular|apple color emoji|segoe ui emoji|var\(.*)$/i;
+  const fams = new Map(); const addF = (n, w) => { n = String(n || '').trim().replace(/^["']|["']$/g, '').trim(); if (!n || n.length > 40 || !/^[a-z]/i.test(n) || GENERIC.test(n)) return; fams.set(n, (fams.get(n) || 0) + w); };
+  for (const m of all.matchAll(/@font-face\s*\{[^}]*?font-family\s*:\s*([^;}]+)/gi)) addF(m[1], 5);
+  for (const m of every.matchAll(/fonts\.googleapis\.com\/css2?\?[^"')\s>]+/gi)) for (const f of m[0].matchAll(/family=([^&:"')]+)/g)) addF(decodeURIComponent(f[1]).replace(/\+/g, ' '), 5);
+  for (const m of all.matchAll(/--([a-z0-9-]*(?:font|display|serif|sans|heading|body|title)[a-z0-9-]*)\s*:\s*([^;}]+)/gi)) if (!/weight|size|feature|variation|line|leading|tracking|style|smooth|stretch|width|height|space|color|bg|shadow/i.test(m[1])) addF(m[2].split(',')[0], 3);
+  for (const m of all.matchAll(/font-family\s*:\s*([^;}]+)/gi)) addF(m[1].split(',')[0], 1);
+  return {
+    url: base,
+    tokens: tokens.slice(0, 16),
+    colors: Object.entries(hex).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([h]) => h),
+    fonts: [...fams.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([n]) => n),
+  };
+}
+
+// Downloads the real images from the product links only. `uses` says what each link is for (product,
+// about or look) and, for product links, which cards show what this offer's buyer gets. Up to `max`
+// images are saved through `save(name, b64, label)`.
+async function collect({ q, id, max = 30, save, deadline, sites, uses }) {
+  sites = sites || await read(linksOf(q)); uses = uses || guessUses(q, sites);
+  const shots = [];
+  const prod = sites.map((s, i) => ({ s, u: uses[i] || {} })).filter((x) => !x.s.failed && x.u.use === 'product');
+  const per = prod.length ? Math.ceil(max / prod.length) : 0;
   const wanted = [];
-  gal.forEach((s) => pick(s.items, per).forEach((x) => wanted.push({ ...x, site: s.url, kind: 'product' })));
-  // Plain pages: their own pictures (photos, product shots) and one screenshot of the first screen.
-  sites.filter((s) => !s.gallery && !s.failed).forEach((s) => { s.items.slice(0, 6).forEach((x) => wanted.push({ ...x, site: s.url, kind: 'site' })); });
+  prod.forEach(({ s, u }) => {
+    const items = Array.isArray(u.keep) ? s.items.filter((x, i) => u.keep.includes(i + 1)) : s.items;
+    (s.gallery ? pick(items, per) : items.slice(0, 6)).forEach((x) => wanted.push({ ...x, site: s.url, kind: 'product' }));
+  });
   let n = 0;
   await Promise.all(wanted.slice(0, max).map(async (x, i) => {
     if (deadline && Date.now() > deadline) return;
@@ -124,8 +218,8 @@ async function collect({ q, id, max = 30, save, deadline }) {
     try { await save(name, v.buf.toString('base64'), [x.name, x.label].filter(Boolean).join(' · ') || 'Image from ' + new URL(x.site).host); } catch { return; }
     shots.push({ name, title: x.name, label: x.label, cat: x.cat_name || x.cat, href: x.live || x.href, site: x.site, kind: x.kind, w: v.w, h: v.h, order: i }); n++;
   }));
-  // A site with no usable pictures still shows up as itself: a screenshot of its first screen.
-  for (const s of sites.filter((y) => !y.failed && !shots.some((z) => z.site === y.url))) {
+  // A product page with no usable pictures still shows up as itself: a screenshot of its first screen.
+  for (const { s } of prod.filter(({ s: y, u }) => !shots.some((z) => z.site === y.url) && !(Array.isArray(u.keep) && !u.keep.length && y.items.length))) {
     if (deadline && Date.now() > deadline - 50000) break;
     const b = await screenshot(s.url); if (!b) continue;
     let v = null; try { v = await normalize(b); } catch { v = null; } if (!v) continue;
@@ -136,8 +230,15 @@ async function collect({ q, id, max = 30, save, deadline }) {
   shots.sort((a, b) => a.order - b.order);
   return {
     shots,
-    sites: sites.map((s) => ({ url: s.url, failed: !!s.failed, title: s.title, h1: s.h1, desc: s.desc, gallery: !!s.gallery, count: s.count, cats: s.cats, labels: s.labels, headings: (s.headings || []).slice(0, 14), names: (s.items || []).filter((x) => x.name).slice(0, 160).map((x) => [x.name, x.label, x.cat_name || x.cat].filter(Boolean).join(' | ')) })),
+    sites: sites.map((s, i) => {
+      const u = uses[i] || {}; const use = s.failed ? 'about' : u.use || 'about';
+      const kept = use === 'product' ? (Array.isArray(u.keep) ? (s.items || []).filter((x, k) => u.keep.includes(k + 1)) : s.items || []) : [];
+      const named = kept.filter((x) => x.name); const gal = use === 'product' && !!s.gallery;
+      const cats = {}; const labels = {};
+      if (gal) named.forEach((x) => { const c = x.cat_name || x.label || x.cat; if (c) cats[c] = (cats[c] || 0) + 1; if (x.label) labels[x.label] = (labels[x.label] || 0) + 1; });
+      return { url: s.url, failed: !!s.failed, use, why: u.why || '', title: s.title, h1: s.h1, desc: s.desc, gallery: gal, count: gal ? named.length : 0, cats, labels, headings: use === 'look' ? [] : (s.headings || []).slice(0, 14), names: named.slice(0, 160).map((x) => [x.name, x.label, x.cat_name || x.cat].filter(Boolean).join(' | ')) };
+    }),
   };
 }
 
-module.exports = { collect, parse, pick, linksOf, normalize, screenshot };
+module.exports = { collect, read, parse, pick, linksOf, lookLinks, lookDomains, guessUses, style, normalize, screenshot };

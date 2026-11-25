@@ -255,7 +255,7 @@
       ${f('audience', 'Who it is for', 'Recreational runners aged 30 to 55 who keep getting knee pain', '', true, 2)}
       ${f('voice', 'Brand voice', 'Warm and plain. Short sentences. Sounds like a coach who has been there.', 'How the copy should sound. The AI writes every page in this voice.', true, 2)}
       ${f('avoid', 'Words and claims to avoid', 'cure, guaranteed results, hustle', 'The AI keeps these out of the copy.', true, 2)}
-      ${f('urls', 'Links', 'https://yoursite.com  https://instagram.com/you', 'Your website and social profiles. The AI reads them for facts, colors and real product images. Up to 5.', true, 2)}`;
+      ${f('urls', 'Links', 'https://yoursite.com  https://instagram.com/you', 'Your website and social profiles. The AI reads them for facts about you, your colors and your fonts. Up to 5.', true, 2)}`;
     const of = (i, k, label, ph, hint) => { const o = q.offers[i]; return `<label class="field"><span>${label}</span>${k === 'offer' ? `<textarea class="textarea" rows="7" data-of="${k}" data-i="${i}" placeholder="${esc(ph)}">${esc(o[k])}</textarea>` : `<input class="input" data-of="${k}" data-i="${i}" placeholder="${esc(ph)}" value="${esc(o[k])}"${k === 'checkout_url' ? ' type="url" inputmode="url"' : ''}>`}${hint ? `<small${k === 'offer' ? ' class="fos-tip"' : ''}>${hint}</small>` : ''}</label>`; };
     const kOffers = () => {
       const main = q.offers.some((o) => o.id === q.main_offer) ? q.main_offer : (q.offers[0] || {}).id;
@@ -317,7 +317,7 @@
     const docsField = () => `<div class="field"><span>Documents and files</span><div class="fos-drop" data-drop="doc" tabindex="0" role="button" aria-label="Add documents"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg><b>Drop documents here</b><span>PDF, Word, text, Markdown, CSV or HTML, up to 5 files, or <u>choose files</u></span><input type="file" id="fos-doc" accept=".pdf,.docx,.txt,.md,.csv,.json,.html,.htm,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/*" multiple hidden></div><small>Course outlines, testimonials, old sales copy, brand guides. The AI reads the text inside.</small><div id="fos-docmsg"></div>
         ${q.docs.length ? `<ul class="fos-docs">${q.docs.map((d, i) => `<li><span>${esc(d.name)}</span><small class="muted">${Math.max(1, Math.round((d.text || '').split(/\s+/).length / 10) * 10)} words</small> <button class="btn sm ghost" data-ddel="${i}">Remove</button></li>`).join('')}</ul>` : ''}</div>`;
     const stContext = () => `<h2>Anything else the AI should know?</h2><p class="lead">All optional. More context means sharper copy.</p>
-      ${f('urls', 'Links', 'https://yoursite.com  https://youtube.com/@you', 'Your website, product or template pages, social profiles. The AI reads them for facts and pulls the real product images and names into the page and graphics. Up to 5.', true, 2)}
+      ${f('urls', 'Links', 'https://yoursite.com  https://youtube.com/@you', 'Your website, social profiles and pages that show this product, like a template gallery. Images come only from pages that show what this funnel sells. Other sites give facts, colors and fonts. Up to 5.', true, 2)}
       ${docsField()}
       ${f('voice', 'Brand voice', 'Warm and plain. Short sentences. Sounds like a coach who has been there.', 'How the copy should sound.', true, 2)}
       ${f('avoid', 'Words and claims to avoid', 'cure, guaranteed results, hustle', 'The AI keeps these out of the copy.', true, 2)}
@@ -659,7 +659,7 @@
           return;
         }
         if (t.closest('[data-rebuild]')) {
-          if (!confirm('Build this funnel again with the latest Funnel OS? It keeps your answers and the research, then redoes the offer, copy, images, graphics and pages. Your current previews are replaced.')) return;
+          if (!confirm('Build this funnel again with the latest Funnel OS? It keeps your answers and the research (made again if it read a site you gave only for its look), then redoes the offer, copy, images, graphics and pages. Your current previews are replaced.')) return;
           t.disabled = true; try { f = await call('rebuild', { id }); view.opt = 0; draw(); start(); } catch (er) { t.disabled = false; G.toast(er.message, 5000); } return;
         }
         if (t.closest('[data-more]') || t.closest('[data-more-x]')) {

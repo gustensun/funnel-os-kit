@@ -110,7 +110,8 @@ For each rewritten section: compare BEFORE and AFTER and keep the one that sells
 const LOOK = `You are a senior conversion designer reviewing screenshots of a live funnel page, desktop and phone, top to bottom. The screenshots come in order as tiles; each tile says which sections it shows.
 Find the worst problems a visitor would notice, most serious first:
 - Broken: overlapping or cut-off text, text running off the screen, sideways scrolling on the phone, broken or missing images, empty boxes, buttons that wrap badly, unreadable contrast.
-- Weak design: no clear focal point in the first screen, flat hierarchy where everything looks the same, walls of text, cramped or uneven spacing, sections that look like a template with stock filler, drawn stand-ins where real product images belong, inconsistent styles between sections.
+- Off-topic images: pictures that do not show this offer, such as other products or programs, screenshots of other websites, or unrelated people and stock scenes. Name each one and say to remove it or show the product instead. Medium severity.
+- Weak design: no clear focal point in the first screen, a small hero visual beside a column of text, flat hierarchy where everything looks the same, small labels above every heading, colored words in many headlines, rows of same-size icon cards, walls of text, cramped or uneven spacing, sections that look like a template with stock filler, drawn stand-ins where real product images belong, inconsistent styles between sections, a page that could belong to any brand.
 - Conversion: the offer or the button not visible in the first screen, the price or guarantee hard to find, a call to action that blends in, proof far from the claims.
 Only name what you can see in the screenshots. Point to the section by its id and say exactly what to change in the code (sizes, spacing, layout, colors, image use). Problems that only show on one device say so.`;
 

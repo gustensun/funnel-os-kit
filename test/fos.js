@@ -55,6 +55,19 @@ const QUIZ = { type: 'sales-page', brand: 'Northside Physio', offer: 'A 6-week o
     ok('reads "use replacer testimonials for now"', F.guessIntent({ proof: 'use replacer testimonials for now' }).proof === 'placeholder');
     ok('reads "I\'ll add testimonials later"', F.guessIntent({ notes: "I'll add testimonials later" }).proof === 'placeholder');
     ok('quiz proof choice wins', F.proofMode({ proof_mode: 'none', proof: 'Real quote' }) === 'none' && F.proofMode({ proof: 'Real quote from Ana' }) === 'real');
+    const CO = require('../api/_collect.js');
+    ok('a site named for its branding is read for the look only', CO.lookLinks({ notes: 'Use my branding from yourbrand.io please' }, ['https://yourbrand.io']).size === 1 && CO.lookLinks({ vibe: 'like acme.com' }, ['https://www.acme.com/']).size === 1 && CO.lookLinks({ notes: 'Sell the templates from https://tpl.example.com/gallery' }, ['https://tpl.example.com/gallery']).size === 0 && CO.lookLinks({ vibe: 'my branding from site.example.com' }, ['https://site.example.com/templates']).size === 0 && CO.lookLinks({ notes: 'use the colors from https://site.example.com/about' }, ['https://site.example.com/about/']).size === 1);
+    const sx = [{ url: 'https://brand.example.com', title: 'Acme Academy | Build a business with AI', h1: 'Build your business', gallery: true, items: [{ name: 'AI Agents' }] }, { url: 'https://tpl.example.com', title: 'Funnel Templates Gallery', h1: '101 funnel templates', gallery: true, items: [] }];
+    ok('a site named in the look field without https is read for its look', JSON.stringify(CO.lookDomains({ vibe: 'Use my branding from yourbrand.io' })) === '["https://yourbrand.io"]' && CO.lookDomains({ notes: 'Email help@example.com about the course' }).length === 0 && CO.lookDomains({ notes: 'Colors like stripe.com please' })[0] === 'https://stripe.com');
+    const gu = CO.guessUses({ offer_name: '101 Funnel Templates', offer: '101 funnel templates with prompts' }, sx);
+    ok('without the AI read, only the page that names the offer gives images', gu[0].use === 'about' && gu[1].use === 'product', gu);
+    const sf = F.siteFacts({ quiz: {}, visuals: { sites: [{ url: 'https://brand.example.com', use: 'look', title: 'Acme', names: ['AI Agents'] }, { url: 'https://tpl.example.com', use: 'product', title: 'Gallery', gallery: true, count: 8, cats: {}, labels: {}, names: ['Design 1', 'Design 2'] }] } });
+    ok('site facts keep other sites out of the product facts', /PRODUCT LINKS[\s\S]*Design 1/.test(sf) && /brand\.example\.com: given for its look only/.test(sf) && !/AI Agents/.test(sf), sf);
+    const cp = F.plainHeads({ pages: [{ path: 'index', sections: [{ id: 'hero', eyebrow: 'Hi', headline: 'Run *far*' }, { id: 'pain', eyebrow: 'Sound familiar', headline: 'Every launch starts from *scratch*' }] }] });
+    ok('only the top headline keeps its accent and no section keeps a label', cp.pages[0].sections[0].headline === 'Run *far*' && cp.pages[0].sections[1].headline === 'Every launch starts from scratch' && cp.pages[0].sections.every((x) => x.eyebrow === ''), cp);
+    ok('research from before links were sorted is made again when a site is given for its look', F.researchFresh({ research: { summary: 'x' }, quiz: { urls: ['https://yourbrand.io'], vibe: 'Use my branding from yourbrand.io' } }) === false && F.researchFresh({ research: { summary: 'x' }, quiz: { urls: ['https://a.example.com'] } }) === true && F.researchFresh({ research: { read: ['https://a.example.com'] }, quiz: { urls: ['https://a.example.com', 'https://yourbrand.io'], vibe: 'branding from yourbrand.io' } }) === true && F.researchFresh({ research: { read: ['https://yourbrand.io'] }, quiz: { urls: ['https://yourbrand.io'], vibe: 'branding from yourbrand.io' } }) === false && F.researchFresh({ research: { read: ['https://site.example.com/templates'] }, quiz: { urls: ['https://site.example.com/templates'], vibe: 'my branding from site.example.com' } }) === true && F.researchFresh({ quiz: {} }) === false);
+    const st = await CO.style(U + '/mock-brand/');
+    ok('site colors and fonts read from its own stylesheet', st && st.tokens.some(([k2, h]) => k2 === 'brand' && h === '#c6f24e') && st.fonts[0] === 'Bricolage Grotesque' && st.fonts.includes('Instrument Sans') && !st.fonts.some((x) => /^\d/.test(x)), st);
   }
 
   r = await fos(B, 'upload', { mime: 'image/png', data: PNG, role: 'product', label: 'Workbook' });
@@ -269,6 +282,7 @@ const QUIZ = { type: 'sales-page', brand: 'Northside Physio', offer: 'A 6-week o
     ok('without a browser the check says so and still reviews the first screen', g.options.every((o) => o.qa.checks.some((c) => c.ok === null && /Full-page screenshots skipped \(the screenshot browser did not start/.test(c.label)) && o.qa.checks.some((c) => /first screen renders cleanly/.test(c.label))), g.options.map((o) => o.qa.checks.map((c) => c.label)));
     const col = (g.steps || []).find((x) => x.id === 'collect');
     ok('collect step read the gallery', col && col.state === 'done' && /8 real images/.test(col.note), col);
+    ok('the AI read the links and kept the gallery as the product', g.visuals.sites[0].use === 'product' && (await (await fetch(U + '/test/fos')).json()).agent.some((x) => x.kind === 'links'), g.visuals.sites);
     const im = (g.visuals || {}).images || [];
     ok('8 real shots kept with names', im.filter((x) => x.kind === 'shot').length === 8 && im.some((x) => x.title === 'Design 3' && /Sales page/.test(x.label)), im.filter((x) => x.kind === 'shot'));
     ok('site facts saved (count, categories)', g.visuals.sites[0].count === 8 && g.visuals.sites[0].cats.Coaches === 2, g.visuals.sites);
@@ -292,6 +306,27 @@ const QUIZ = { type: 'sales-page', brand: 'Northside Physio', offer: 'A 6-week o
     ok('build it again keeps research and restarts at collect', r.data && r.data.status === 'running' && r.data.step === 'collect' && r.data.research, r.data && [r.data.status, r.data.step]);
     g = await until(B, gid, ['review', 'failed'], 120); ok('rebuild reaches review', g.status === 'review', { s: g.status, e: g.error, st: g.steps });
     await fos(B, 'delete', { id: gid });
+  }
+
+  // A site named for its branding: its colors and fonts, none of its images, programs or offers.
+  {
+    r = await fos(B, 'create', { quiz: { ...QUIZ, brand: 'Template Pack', options: 2, palette: null, fonts: null, checkout_url: '', urls: [U + '/mock-brand/'], notes: 'Use my branding from ' + U + '/mock-brand/ for this one.', offer: 'A pack of 8 funnel templates you can launch today. Includes the templates, the prompts and a launch guide. 37 dollars.' } });
+    const bid = r.data && r.data.id; ok('brand link build starts', !!bid, r);
+    const b = await until(B, bid, ['review', 'failed'], 120);
+    ok('brand link build reaches review', b.status === 'review', { s: b.status, e: b.error, st: b.steps });
+    const col = (b.steps || []).find((x) => x.id === 'collect'); const im = (b.visuals || {}).images || [];
+    ok('a site named for its branding gives no images', (b.visuals.refs || []).length === 0 && !im.some((x) => ['shot', 'site', 'hero', 'wall'].includes(x.kind)), im.map((x) => x.kind));
+    ok('collect says the site gives the look and how to add product images', col && /used for the look only/.test(col.note) && /template gallery/.test(col.note), col);
+    ok('the site is saved as a look link with no product names', b.visuals.sites[0].use === 'look' && b.visuals.sites[0].count === 0 && !(b.visuals.sites[0].names || []).length, b.visuals.sites);
+    const P = (await (await fetch(U + '/test/fos')).json()).prompts || {};
+    ok('the brand kit matches the site colors and fonts', /MATCH THEIR SITE/.test(P.brand || '') && /--brand #c6f24e/.test(P.brand || '') && /Bricolage Grotesque/.test(P.brand || ''), (P.brand || '').slice(-900));
+    ok('none of the site programs reach the copy, the wireframe or the pages', !/Mock Coaching Program|Mock AI Agents|Mock Vault/.test((P.copy || '') + (P.wireframe || '') + (P.build || '')) && /given for its look only/.test(P.copy || ''), (P.copy || '').slice(0, 300));
+    ok('options are asked to look different, with their own hero and moves', /must look clearly different at first glance/.test(P.wireframe || '') && /"hero":""/.test(P.wireframe || '') && /NO PRODUCT IMAGES/.test(P.wireframe || ''), (P.wireframe || '').slice(-700));
+    ok('option 2 is told to move away from option 1', /DESIGN OPTION 2[\s\S]*must not look like option 1/.test(P.build || ''), '');
+    r = await fos(B, 'rebuild', { id: bid });
+    ok('build it again keeps research that left out the look site', r.data && r.data.step === 'collect' && Array.isArray(r.data.research.read) && !r.data.research.read.length, r.data && [r.data.step, r.data.research && r.data.research.read]);
+    const b2 = await until(B, bid, ['review', 'failed'], 120); ok('brand link rebuild reaches review', b2.status === 'review', { s: b2.status, e: b2.error });
+    await fos(B, 'delete', { id: bid });
   }
 
   console.log(`fos: ${pass} passed, ${fail} failed`);

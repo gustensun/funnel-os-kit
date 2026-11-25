@@ -173,6 +173,7 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname.startsWith('/mock-or/')) return FM.openrouter(req, res, u);
     if (u.pathname.startsWith('/mock-shot')) return FM.shot(req, res, u, PORT);
     if (u.pathname.startsWith('/mock-gallery')) return FM.gallery(req, res, u);
+    if (u.pathname.startsWith('/mock-brand')) return FM.brandSite(req, res, u);
     if (u.pathname === '/test/fos') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(FM.LOG)); }
     if (u.pathname === '/test/studio') { if (req.method === 'POST') FM.resetStudio(); res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(FM.studioState(u.searchParams.get('repo') || 'me/studio'))); }
     if (u.pathname.startsWith('/mock-graph/')) return mockGraph(req, res, u, raw);

@@ -140,8 +140,10 @@ const A = {
   rebuild: async (jwt, b, req) => {
     const id = uuid(b.id); const f = await rpc(jwt, 'gai_funnel_get', { p_id: id });
     if (f.status === 'running') throw bad('This funnel is still working. Wait for it to finish, then build it again.', 409);
-    const keepSteps = (f.steps || []).filter((x) => x.id === 'research');
-    const g = await rpc(jwt, 'gai_funnel_save', { p_id: id, p_patch: { status: 'running', step: f.research ? 'collect' : 'research', steps: keepSteps, visuals: {}, options: [], revisions: [], error: null, work: {} }, p_release: true });
+    // The research stays unless it may have read a site they gave only for its look; then it is made again.
+    const keep = F.researchFresh(f);
+    const keepSteps = keep ? (f.steps || []).filter((x) => x.id === 'research') : [];
+    const g = await rpc(jwt, 'gai_funnel_save', { p_id: id, p_patch: { status: 'running', step: keep ? 'collect' : 'research', steps: keepSteps, visuals: {}, options: [], revisions: [], error: null, work: {} }, p_release: true });
     kick(req, jwt, id); return g;
   },
   // One more design option on the same copy, offer and graphics. Only the new option is built and checked.
